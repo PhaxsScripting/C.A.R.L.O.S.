@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+ev_bin_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+if "$ev_bin_dir/evctl" health >/dev/null 2>&1; then
+    exit 0
+fi
+
+# A graceful restart has a small window where D-Bus still sees the old owner
+# after its private IPC socket has closed. Retry activation until the new core
+# is actually answering, rather than treating D-Bus's stale "already running"
+# response as success.
+attempt=0
+# Resident speech/model workers can take a few seconds to terminate cleanly.
+# Keep retrying D-Bus activation until the previous owner has fully released
+# the name instead of reporting a false startup failure during that handoff.
+while [ "$attempt" -lt 150 ]; do
+    /usr/bin/gdbus call --session \
+        --dest org.freedesktop.DBus \
+        --object-path /org/freedesktop/DBus \
+        --method org.freedesktop.DBus.StartServiceByName \
+        com.ev.Core 0 >/dev/null 2>&1 || true
+    if "$ev_bin_dir/evctl" health >/dev/null 2>&1; then
+        exit 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.2
+done
+
+printf '%s\n' "E.V. core did not become ready after D-Bus activation." >&2
+exit 1

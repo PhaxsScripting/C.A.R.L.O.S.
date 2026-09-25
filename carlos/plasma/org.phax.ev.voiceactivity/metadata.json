@@ -1,0 +1,18 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Phaxity"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Live E.V. wake, microphone, and command activity",
+        "EnabledByDefault": true,
+        "Icon": "audio-input-microphone",
+        "Id": "org.phax.ev.voiceactivity",
+        "License": "MIT",
+        "Name": "E.V. Neural Voice"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+ev_app_root="${XDG_DATA_HOME:-$HOME/.local/share}/ev/app"
+export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
+exec "$ev_app_root/bin/ev-ui" "$@"

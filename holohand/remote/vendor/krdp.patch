@@ -1,0 +1,169 @@
+diff --git a/server/main.cpp b/server/main.cpp
+index 9216eb8..31f305c 100644
+--- a/server/main.cpp
++++ b/server/main.cpp
+@@ -30,6 +30,7 @@ int main(int argc, char **argv)
+ 
+     KAboutData about(u"krdp-server"_s, u"KRDP Server"_s, QStringLiteral(KRdp_VERSION_STRING));
+     KAboutData::setApplicationData(about);
++    QGuiApplication::setDesktopFileName(u"org.kde.krdpserver"_s);
+ 
+     KCrash::initialize();
+ 
+@@ -96,7 +97,9 @@ int main(int argc, char **argv)
+     if (parser.isSet(u"username"_s)) {
+         KRdp::User user;
+         user.name = parser.value(u"username"_s);
+-        user.password = parser.value(u"password"_s);
++        user.password = qEnvironmentVariable("HOLOHAND_RDP_PASSWORD");
++        qunsetenv("HOLOHAND_RDP_PASSWORD");
++        if (user.password.isEmpty()) { user.password = parser.value(u"password"_s); }
+         server.addUser(user);
+     }
+     // Otherwise use KCM username list
+diff --git a/src/AbstractSession.cpp b/src/AbstractSession.cpp
+index 02fd7fd..c7ff1bc 100644
+--- a/src/AbstractSession.cpp
++++ b/src/AbstractSession.cpp
+@@ -102,11 +102,13 @@ void AbstractSession::setStreamingEnabled(bool enable)
+ 
+ void AbstractSession::setVideoFrameRate(quint32 framerate)
+ {
++    const int cap = qEnvironmentVariableIntValue("HOLOHAND_MAX_FPS");
++    if (cap > 0) framerate = qMin(framerate, quint32(cap));
+     d->frameRate = framerate;
+     if (d->encodedStream) {
+         d->encodedStream->setMaxFramerate({framerate, 1});
+         // this buffers 1 second of frames and drops after that
+-        d->encodedStream->setMaxPendingFrames(framerate);
++        d->encodedStream->setMaxPendingFrames(3);
+     }
+ }
+ 
+@@ -129,6 +131,7 @@ PipeWireEncodedStream *AbstractSession::stream()
+ {
+     if (!d->encodedStream) {
+         d->encodedStream = std::make_unique<PipeWireEncodedStream>();
++        d->encodedStream->setMaxPendingFrames(3);
+         if (d->frameRate) {
+             d->encodedStream->setMaxFramerate({d->frameRate.value(), 1});
+         }
+diff --git a/src/PortalSession.cpp b/src/PortalSession.cpp
+index 178e5bf..2d7da6c 100644
+--- a/src/PortalSession.cpp
++++ b/src/PortalSession.cpp
+@@ -52,19 +52,33 @@ const QDBusArgument &operator>>(const QDBusArgument &arg, PortalSessionStream &s
+     return arg;
+ }
+ 
++void PortalRequest::subscribe(const QString &token)
++{
++    QString sender = QDBusConnection::sessionBus().baseService().mid(1);
++    sender.replace(u'.', u'_');
++    m_path = QStringLiteral("/org/freedesktop/portal/desktop/request/%1/%2").arg(sender, token);
++    QDBusConnection::sessionBus().connect(dbusService, m_path, dbusRequestInterface, dbusResponse, this, SLOT(onFinished(uint, QVariantMap)));
++}
++
+ void PortalRequest::onStarted(QDBusPendingCallWatcher *watcher)
+ {
+     QDBusPendingReply<QDBusObjectPath> reply = *watcher;
+     if (!reply.isError()) {
+-        QDBusConnection::sessionBus().connect(QString{}, reply.value().path(), dbusRequestInterface, dbusResponse, this, SLOT(onFinished(uint, QVariantMap)));
++        if (reply.value().path() != m_path) {
++            QDBusConnection::sessionBus().disconnect(dbusService, m_path, dbusRequestInterface, dbusResponse, this, SLOT(onFinished(uint, QVariantMap)));
++            m_path = reply.value().path();
++            QDBusConnection::sessionBus().connect(dbusService, m_path, dbusRequestInterface, dbusResponse, this, SLOT(onFinished(uint, QVariantMap)));
++        }
+     } else {
+-        m_callback(-1, {{QStringLiteral("errorMessage"), reply.error().message()}});
++        onFinished(2, {{QStringLiteral("errorMessage"), reply.error().message()}});
+     }
+     watcher->deleteLater();
+ }
+ 
+ void PortalRequest::onFinished(uint code, const QVariantMap &result)
+ {
++    if (m_finished) return;
++    m_finished = true;
+     if (m_context) {
+         m_callback(code, result);
+     }
+@@ -153,7 +167,7 @@ void PortalSession::start()
+         {QStringLiteral("handle_token"), createHandleToken()},
+         {QStringLiteral("session_handle_token"), createHandleToken()},
+     };
+-    new PortalRequest(d->remoteInterface->CreateSession(parameters), this, &PortalSession::onCreateSession);
++    new PortalRequest(parameters.value(QStringLiteral("handle_token")).toString(), [&] { return d->remoteInterface->CreateSession(parameters); }, this, &PortalSession::onCreateSession);
+ }
+ 
+ void PortalSession::sendEvent(const std::shared_ptr<QEvent> &event)
+@@ -258,7 +272,7 @@ void PortalSession::onCreateSession(uint code, const QVariantMap &result)
+         parameters[QStringLiteral("restore_token")] = restoreToken;
+     }
+ 
+-    new PortalRequest(d->remoteInterface->SelectDevices(d->sessionPath, parameters), this, &PortalSession::onDevicesSelected);
++    new PortalRequest(parameters.value(QStringLiteral("handle_token")).toString(), [&] { return d->remoteInterface->SelectDevices(d->sessionPath, parameters); }, this, &PortalSession::onDevicesSelected);
+ }
+ 
+ void PortalSession::onDevicesSelected(uint code, const QVariantMap & /*result*/)
+@@ -277,7 +291,8 @@ void PortalSession::onDevicesSelected(uint code, const QVariantMap & /*result*/)
+                       {QStringLiteral("multiple"), activeStream() >= 0}};
+     }
+ 
+-    new PortalRequest(d->screencastInterface->SelectSources(d->sessionPath, parameters), this, &PortalSession::onSourcesSelected);
++    parameters[QStringLiteral("handle_token")] = createHandleToken();
++    new PortalRequest(parameters.value(QStringLiteral("handle_token")).toString(), [&] { return d->screencastInterface->SelectSources(d->sessionPath, parameters); }, this, &PortalSession::onSourcesSelected);
+ }
+ 
+ void PortalSession::onSourcesSelected(uint code, const QVariantMap & /*result*/)
+@@ -291,7 +306,7 @@ void PortalSession::onSourcesSelected(uint code, const QVariantMap & /*result*/)
+     auto parameters = QVariantMap{
+         {QStringLiteral("handle_token"), createHandleToken()},
+     };
+-    new PortalRequest(d->remoteInterface->Start(d->sessionPath, QString{}, parameters), this, &PortalSession::onSessionStarted);
++    new PortalRequest(parameters.value(QStringLiteral("handle_token")).toString(), [&] { return d->remoteInterface->Start(d->sessionPath, QString{}, parameters); }, this, &PortalSession::onSessionStarted);
+ }
+ 
+ void KRdp::PortalSession::onSessionStarted(uint code, const QVariantMap &result)
+diff --git a/src/PortalSession_p.h b/src/PortalSession_p.h
+index efa90cc..1f9ed5c 100644
+--- a/src/PortalSession_p.h
++++ b/src/PortalSession_p.h
+@@ -30,9 +30,9 @@ class PortalRequest : public QObject
+ {
+     Q_OBJECT
+ public:
+-    template<typename ContextType, typename Callback>
+-    PortalRequest(const QDBusPendingCall &call, ContextType *context, Callback callback)
+-        : m_context(context)
++    template<typename Call, typename ContextType, typename Callback>
++    PortalRequest(const QString &token, Call call, ContextType *context, Callback callback)
++        : QObject(context), m_context(context)
+     {
+         if constexpr (std::is_member_function_pointer<Callback>::value) {
+             m_callback = std::bind(callback, context, std::placeholders::_1, std::placeholders::_2);
+@@ -40,18 +40,19 @@ public:
+             m_callback = callback;
+         }
+ 
+-        auto watcher = new QDBusPendingCallWatcher(call);
+-        // We need to wait here because otherwise we risk the signal arriving
+-        // before we know what path to listen on.
+-        watcher->waitForFinished();
+-        onStarted(watcher);
++        subscribe(token);
++        auto watcher = new QDBusPendingCallWatcher(call(), this);
++        connect(watcher, &QDBusPendingCallWatcher::finished, this, &PortalRequest::onStarted);
+     }
+ 
+ private:
++    void subscribe(const QString &token);
+     void onStarted(QDBusPendingCallWatcher *watcher);
+     Q_SLOT void onFinished(uint code, const QVariantMap &result);
+ 
+     QPointer<QObject> m_context;
++    QString m_path;
++    bool m_finished = false;
+     std::function<void(uint, const QVariantMap &)> m_callback;
+ };
+ 

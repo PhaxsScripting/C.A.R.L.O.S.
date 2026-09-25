@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""Carlos diagnostics using the existing same-user Unix socket."""
+import argparse,json,os,socket,uuid
+from pathlib import Path
+p=argparse.ArgumentParser(description='Carlos local control');p.add_argument('action',choices=['status','capabilities','support','privacy']);p.add_argument('mode',nargs='?');a=p.parse_args()
+s=socket.socket(socket.AF_UNIX);s.settimeout(10);s.connect(str(Path(os.environ.get('XDG_RUNTIME_DIR',f'/run/user/{os.getuid()}'))/'ev/ev.sock'))
+f=s.makefile('rwb');f.readline();ident=uuid.uuid4().hex
+f.write((json.dumps({'type':'carlos.privacy.set' if a.action=='privacy' else 'carlos.'+a.action,'id':ident,'payload':{'mode':a.mode} if a.action=='privacy' else {}})+'\n').encode());f.flush()
+for line in f:
+ d=json.loads(line)
+ if d.get('id')==ident:print(json.dumps(d,indent=2));break
+s.close()

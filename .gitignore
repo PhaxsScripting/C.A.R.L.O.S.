@@ -1,0 +1,25 @@
+# Private runtime state and generated output stay on your own machine.
+**/__pycache__/
+*.py[cod]
+**/.venv/
+**/.bench-venv/
+**/node_modules/
+**/build/
+**/dist/
+**/.pytest_cache/
+**/test-results/
+**/playwright-report/
+**/.cache/
+.env
+.env.*
+*.log
+*.sqlite*
+*.db
+*.pem
+*.key
+*.gguf
+*.onnx
+*.bin
+pairing.json
+credentials.json
+config.local.json

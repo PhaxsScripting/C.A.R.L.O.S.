@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Carlos Control Center
+GenericName=Desktop AI Control Center
+Comment=Inspect and control the local Carlos assistant
+Exec=@EV_UI@
+Icon=ev-control-center
+Terminal=false
+Categories=System;
+Keywords=AI;Assistant;System;Voice;Telemetry;
+StartupNotify=true
+X-KDE-StartupNotify=true

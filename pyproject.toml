@@ -1,0 +1,3 @@
+[tool.black]
+line-length = 100
+extend-exclude = "vendor|build|node_modules"

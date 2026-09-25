@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+ev_app_root="${XDG_DATA_HOME:-$HOME/.local/share}/ev/app"
+ev_config_root="${XDG_CONFIG_HOME:-$HOME/.config}/ev"
+export PYTHONPATH="$ev_app_root/core${PYTHONPATH:+:$PYTHONPATH}"
+export EV_DBUS_NAME=com.ev.Core
+provider_env="$ev_config_root/provider.env"
+if [ -r "$provider_env" ]; then
+    provider_owner=$(stat -c %u "$provider_env")
+    provider_mode=$(stat -c %a "$provider_env")
+    if [ "$provider_owner" != "$(id -u)" ] || [ $((provider_mode % 100)) -ne 0 ]; then
+        printf '%s\n' "E.V. refused provider.env because it is not private to the current user." >&2
+        exit 1
+    fi
+    while IFS='=' read -r provider_name provider_value; do
+        case "$provider_name" in
+            NVIDIA_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|GROQ_API_KEY|OPENROUTER_API_KEY)
+                export "$provider_name=$provider_value"
+                ;;
+        esac
+    done < "$provider_env"
+fi
+exec /usr/bin/python3 -m ev "$@"

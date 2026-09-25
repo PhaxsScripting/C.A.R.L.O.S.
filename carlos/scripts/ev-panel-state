@@ -1,0 +1,15 @@
+#!/bin/sh
+set -u
+
+runtime_root=${XDG_RUNTIME_DIR:-"/run/user/$(id -u)"}
+socket_path="$runtime_root/ev/ev.sock"
+offline='{"type":"response","id":"panel","payload":{"connected":false,"state":"OFFLINE","detail":"E.V. core unavailable","rms":0.0,"peak":0.0,"waveform":[],"voice_active":false,"wake_active":false,"microphone":""}}'
+
+if [ ! -S "$socket_path" ]; then
+    printf '%s\n' "$offline"
+    exit 0
+fi
+
+printf '%s\n' '{"type":"panel.state","id":"panel","payload":{}}' \
+    | /usr/bin/socat -t 0.35 - "UNIX-CONNECT:$socket_path" \
+    || printf '%s\n' "$offline"

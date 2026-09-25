@@ -1,0 +1,11 @@
+--- a/src/protocols/rdp/settings.c
++++ b/src/protocols/rdp/settings.c
+@@ -1542,6 +1542,8 @@
+     if (guac_settings->enable_gfx) {
+ 
+         freerdp_settings_set_bool(rdp_settings, FreeRDP_SupportGraphicsPipeline, TRUE);
++        freerdp_settings_set_bool(rdp_settings, FreeRDP_GfxH264, TRUE);
++        freerdp_settings_set_bool(rdp_settings, FreeRDP_GfxAVC444, FALSE);
+         freerdp_settings_set_bool(rdp_settings, FreeRDP_RemoteFxCodec, TRUE);
+ 
+         if (freerdp_settings_get_uint32(rdp_settings, FreeRDP_ColorDepth) != RDP_GFX_REQUIRED_DEPTH) {
