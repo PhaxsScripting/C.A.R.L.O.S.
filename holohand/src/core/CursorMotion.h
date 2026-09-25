@@ -21,6 +21,7 @@ class CursorMotion {
         height_ = std::max(1., height);
     }
     void freeze() {
+        reacquiring_ = positioned_;
         active_ = false;
         samples_ = 0;
         lastSample_ = 0;
@@ -41,13 +42,16 @@ class CursorMotion {
         }
         p.x = std::clamp(p.x, 0., 1.);
         p.y = std::clamp(p.y, 0., 1.);
-        if (lastSample_ && (t <= lastSample_ || t - lastSample_ > .25))
+        // Duplicate/out-of-order observations cannot advance or reset the filter.
+        if (samples_ && t <= lastSample_)
+            return;
+        if (samples_ && t - lastSample_ > .25)
             freeze();
         double dt = lastSample_ ? std::clamp(t - lastSample_, .01, .15) : .067;
         if (samples_ && distance(p, raw_) > (direct_ ? .35 : .18)) {
-            if (!suspect_ || distance(p, *suspect_) > .045) {
+            if (!suspect_ || t - suspectTime_ > .1 || distance(p, *suspect_) > .045) {
                 suspect_ = p;
-                lastSample_ = t;
+                suspectTime_ = t;
                 return;
             }
         }
@@ -63,7 +67,9 @@ class CursorMotion {
             // Direct mode maps the accepted fingertip itself, without a trailing
             // target or prediction. Two observations still arm reacquisition.
             raw_ = p;
-            if (precision_ && positioned_) {
+            if (reacquiring_) {
+                filtered_ = p;
+            } else if (precision_ && positioned_) {
                 // Sub-pixel noise is held, small corrections are damped, and
                 // deliberate travel remains direct. No velocity prediction.
                 const double d = pixels(p, output_);
@@ -108,10 +114,24 @@ class CursorMotion {
         }
     }
     std::optional<Point> step(double t) {
+        if (!std::isfinite(t) || (lastStep_ && t < lastStep_))
+            return {};
         const double dt = lastStep_ ? std::clamp(t - lastStep_, 0., .032) : .016;
         lastStep_ = t;
-        if (!active_ || t - lastSample_ > .2)
+        if (!active_ || t < lastSample_ || t - lastSample_ > .15)
             return {};
+        if (suspect_)
+            return output_; // Don't chase a previous target while rejecting a new observation.
+        if (direct_ && reacquiring_) {
+            Point delta{filtered_.x - output_.x, filtered_.y - output_.y};
+            const double length = std::hypot(delta.x, delta.y);
+            const double gain = length > 0 ? std::min(1., 1.8 * dt / length) : 1.;
+            output_.x += delta.x * gain;
+            output_.y += delta.y * gain;
+            if (gain == 1.)
+                reacquiring_ = false;
+            return output_;
+        }
         if (direct_)
             return output_;
         // At most 20 ms / half a screen pixel of pointer-only prediction. It never
@@ -148,6 +168,7 @@ class CursorMotion {
     bool active_ = false, positioned_ = false;
     bool direct_ = false;
     bool precision_ = false;
-    double lastSample_ = 0, lastStep_ = 0;
+    bool reacquiring_ = false;
+    double lastSample_ = 0, lastStep_ = 0, suspectTime_ = 0;
 };
 } // namespace holohand

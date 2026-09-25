@@ -10,11 +10,14 @@ class HandFilter {
     void reset() { ready_ = false; }
     Hand update(const Hand &raw) {
         if (!raw.valid) {
+            reset();
             return raw;
         }
         for (auto p : raw.p)
-            if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z))
+            if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) {
+                reset();
                 return {};
+            }
         if (!ready_) {
             previous_ = raw;
             ready_ = true;

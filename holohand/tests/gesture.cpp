@@ -405,11 +405,43 @@ int main() {
         c.submit({.8, .7}, 2);
         c.submit({.8, .7}, 2.034);
         result = c.step(2.034);
-        assert(result && distance(*result, {.8, .7}) < 1e-9); // snaps to reacquired hand
+        assert(result && distance(*result, {.21, .3}) <= 1.8 * .032 + 1e-9);
+        const auto held = *result;
         c.submit({.05, .05}, 2.068);
         result = c.step(2.068);
-        assert(result && distance(*result, {.8, .7}) < 1e-9); // isolated outlier rejected
+        assert(result && distance(*result, held) < 1e-9); // isolated outlier rejected
         assert(!c.step(3));
+    }
+    {
+        // Rejected spikes must not keep an old target alive indefinitely.
+        CursorMotion c;
+        c.setDirect(true);
+        c.submit({.2, .2}, 1);
+        c.submit({.2, .2}, 1.03);
+        assert(c.step(1.03));
+        for (int i = 1; i <= 4; ++i)
+            c.submit({i % 2 ? .95 : .6, .9}, 1.03 + i * .04);
+        assert(!c.step(1.2));
+    }
+    {
+        CursorMotion c;
+        c.setDirect(true);
+        c.submit({.2, .2}, 1);
+        c.submit({.2, .2}, 1.03);
+        c.submit({.4, .4}, 1.03);
+        c.submit({.3, .3}, 1.01);
+        assert(distance(*c.step(1.04), {.2, .2}) < 1e-9);
+        assert(!c.step(std::numeric_limits<double>::quiet_NaN()));
+    }
+    {
+        HandFilter filter;
+        filter.update(p);
+        filter.update(Hand{});
+        auto returned = p;
+        for (auto &v : returned.p)
+            v.x += .4;
+        const auto reacquired = filter.update(returned);
+        assert(reacquired.valid && distance(reacquired.p[8], returned.p[8]) < 1e-9);
     }
     {
         GestureEngine g;
