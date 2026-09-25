@@ -4,7 +4,8 @@ permissions:
   contents: read
 jobs:
   python:
-    runs-on: ubuntu-latest
+    # Keep real user-namespace sandbox tests on a compatible, fixed runner.
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
