@@ -1,5 +1,7 @@
 #include "Camera.h"
+#include "core/CaptureTiming.h"
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <fcntl.h>
 #include <linux/videodev2.h>
@@ -39,6 +41,7 @@ void Camera::close() {
     fd_ = -1;
     streaming_ = false;
     originalExposurePriority_ = -1;
+    capturedAt_ = 0;
 }
 bool Camera::open(const std::string &device) {
     close();
@@ -72,6 +75,7 @@ bool Camera::open(const std::string &device) {
     width_ = f.fmt.pix.width;
     height_ = f.fmt.pix.height;
     format_ = f.fmt.pix.pixelformat;
+    stride_ = std::max(size_t(f.fmt.pix.bytesperline), size_t(width_) * 2);
     if (format_ != V4L2_PIX_FMT_MJPEG && format_ != V4L2_PIX_FMT_YUYV) {
         error = "Unsupported camera pixel format";
         close();
@@ -121,6 +125,10 @@ bool Camera::open(const std::string &device) {
     return true;
 }
 bool Camera::read(cv::Mat &frame) {
+    frame.release();
+    capturedAt_ = 0;
+    const double readStarted =
+        std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
     if (fd_ < 0)
         return false;
     pollfd p{fd_, POLLIN, 0};
@@ -148,15 +156,32 @@ bool Camera::read(cv::Mat &frame) {
         b = newest;
     }
     bool ok = false;
-    if (b.index < buffers_.size() && b.bytesused <= buffers_[b.index].size) {
+    if (!(b.flags & V4L2_BUF_FLAG_ERROR) && b.bytesused > 0 && b.index < buffers_.size() &&
+        b.bytesused <= buffers_[b.index].size) {
         auto data = static_cast<unsigned char *>(buffers_[b.index].data);
-        if (format_ == V4L2_PIX_FMT_MJPEG)
-            frame = cv::imdecode(cv::Mat(1, b.bytesused, CV_8U, data), cv::IMREAD_COLOR);
-        else if (b.bytesused >= unsigned(width_ * height_ * 2))
-            cv::cvtColor(cv::Mat(height_, width_, CV_8UC2, data), frame, cv::COLOR_YUV2BGR_YUYV);
+        try {
+            if (format_ == V4L2_PIX_FMT_MJPEG)
+                frame = cv::imdecode(cv::Mat(1, b.bytesused, CV_8U, data), cv::IMREAD_COLOR);
+            else if (b.bytesused >= stride_ * size_t(height_))
+                cv::cvtColor(cv::Mat(height_, width_, CV_8UC2, data, stride_), frame,
+                             cv::COLOR_YUV2BGR_YUYV);
+        } catch (const cv::Exception &) {
+            frame.release(); // Requeue the buffer below; a bad JPEG isn't an app crash.
+        }
         ok = !frame.empty();
     }
-    call(fd_, VIDIOC_QBUF, &b);
+    const double timestamp = captureTimestamp(
+        double(b.timestamp.tv_sec) + double(b.timestamp.tv_usec) / 1e6,
+        (b.flags & V4L2_BUF_FLAG_TIMESTAMP_MASK) == V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC, readStarted);
+    if (call(fd_, VIDIOC_QBUF, &b) < 0) {
+        error = strerror(errno);
+        return false;
+    }
+    if (ok) {
+        capturedAt_ = timestamp;
+        error.clear();
+    } else
+        error = "Invalid or damaged camera frame";
     return ok;
 }
 } // namespace holohand

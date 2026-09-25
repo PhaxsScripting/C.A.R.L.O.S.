@@ -1,4 +1,5 @@
 #include "core/Gesture.h"
+#include "core/CaptureTiming.h"
 #include "core/CursorMotion.h"
 #include "core/DwellClick.h"
 #include "core/HandFilter.h"
@@ -34,6 +35,18 @@ int count(const std::vector<Event> &e, Action a) {
     return n;
 }
 int main() {
+    {
+        assert(freshCapture(10, 10.1));
+        assert(!freshCapture(10, 10.2));
+        assert(!freshCapture(10.1, 10));
+        assert(!freshCapture(0, 0));
+        assert(!freshCapture(std::numeric_limits<double>::quiet_NaN(), 10));
+        assert(!freshCapture(10, std::numeric_limits<double>::infinity()));
+        // A delayed decode must preserve the old hardware timestamp.
+        assert(captureTimestamp(9, true, 10) == 9);
+        assert(!freshCapture(captureTimestamp(9, true, 10), 10.01));
+        assert(captureTimestamp(123456789, false, 10) == 10);
+    }
     auto p = point();
     auto pinch = p;
     pinch.p[4] = pinch.p[8];

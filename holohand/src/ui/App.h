@@ -16,6 +16,7 @@
 #include <QTimer>
 #include <QWidget>
 #include <atomic>
+#include <condition_variable>
 #include <mutex>
 #include <thread>
 namespace holohand {
@@ -44,19 +45,23 @@ class App : public QWidget {
         std::shared_ptr<void> sourceFrame;
         double time = 0, ms = 0;
         uint64_t seq = 0;
+        uint64_t generation = 0;
         QString error;
         QString backend;
     };
     std::atomic<bool> stop_{false}, paused_{false};
     std::atomic<int> dominant_{0};
+    std::atomic<uint64_t> trackingGeneration_{0};
     std::thread capture_, inference_, alignment_;
     std::mutex frameMutex_;
+    std::condition_variable frameReady_;
     mutable std::mutex resultMutex_;
     std::shared_ptr<void> frame_;
     QImage videoFrame_;
     uint64_t previewSeq_ = 0;
     uint64_t previewUpdates_ = 0;
     uint64_t frameSeq_ = 0, processed_ = 0, dropped_ = 0;
+    uint64_t frameGeneration_ = 0;
     uint64_t alignedFrames_ = 0;
     double frameTime_ = 0;
     Result latest_;
@@ -64,6 +69,7 @@ class App : public QWidget {
         QImage video;
         Hand hand;
         uint64_t seq = 0;
+        uint64_t generation = 0;
         double time = 0, alignmentMs = 0;
     };
     mutable std::mutex presentationMutex_;

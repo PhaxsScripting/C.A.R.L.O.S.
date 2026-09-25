@@ -1,4 +1,5 @@
 #include "App.h"
+#include "core/CaptureTiming.h"
 #include "vision/Camera.h"
 #include "vision/MotionAligner.h"
 #include "vision/Tracker.h"
@@ -91,7 +92,7 @@ App::App() {
     handChoice_->setCurrentIndex(dominant_);
     connect(handChoice_, &QComboBox::currentIndexChanged, this, [this](int i) {
         dominant_ = i;
-        release();
+        pause(paused_);
     });
     form->addRow("Controlling hand", handChoice_);
     effectsChoice_ = new QComboBox;
@@ -352,6 +353,20 @@ void App::release() {
 }
 void App::pause(bool p) {
     paused_ = p;
+    ++trackingGeneration_;
+    {
+        std::lock_guard lock(frameMutex_);
+        frame_.reset();
+    }
+    {
+        std::lock_guard lock(resultMutex_);
+        latest_ = {};
+    }
+    {
+        std::lock_guard lock(presentationMutex_);
+        presentation_ = {};
+    }
+    frameReady_.notify_all();
     release();
     if (preview_)
         preview_->clearTracking();
@@ -414,6 +429,7 @@ void App::startWorkers() {
                 continue;
             }
             cv::Mat frame;
+            const auto generation = trackingGeneration_.load();
             if (!camera.read(frame)) {
                 camera.close();
                 if (!camera.open(device_.toStdString())) {
@@ -438,9 +454,11 @@ void App::startWorkers() {
                 std::lock_guard l(frameMutex_);
                 frame_ = std::make_shared<cv::Mat>(std::move(frame));
                 videoFrame_ = std::move(video);
-                frameTime_ = now();
+                frameTime_ = camera.capturedAt();
+                frameGeneration_ = generation;
                 frameSeq_ = ++seq;
             }
+            frameReady_.notify_all();
         }
     });
     inference_ = std::thread([this] {
@@ -450,21 +468,34 @@ void App::startWorkers() {
                 dir = QCoreApplication::applicationDirPath() + "/../share/holohand/models";
             Tracker tracker(dir.toStdString());
             uint64_t seen = 0;
+            uint64_t generationSeen = trackingGeneration_;
             while (!stop_) {
                 std::shared_ptr<void> frame;
                 double timestamp = 0;
                 uint64_t seq = 0;
+                uint64_t generation = 0;
                 {
-                    std::lock_guard l(frameMutex_);
-                    if (frameSeq_ != seen && !paused_) {
+                    std::unique_lock l(frameMutex_);
+                    frameReady_.wait_for(l, std::chrono::milliseconds(100), [this, seen] {
+                        return stop_ || (!paused_ && frame_ && frameSeq_ != seen);
+                    });
+                    if (stop_)
+                        break;
+                    if (frameSeq_ != seen && !paused_ && frame_) {
                         frame = frame_;
                         timestamp = frameTime_;
                         seq = frameSeq_;
+                        generation = frameGeneration_;
                     }
                 }
-                if (!frame) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+                if (!frame)
                     continue;
+                seen = seq;
+                if (generation != trackingGeneration_ || !freshCapture(timestamp, now()))
+                    continue;
+                if (generationSeen != generation) {
+                    tracker.reset();
+                    generationSeen = generation;
                 }
                 auto image = std::static_pointer_cast<cv::Mat>(frame);
                 auto start = now();
@@ -476,16 +507,15 @@ void App::startWorkers() {
                 r.time = timestamp;
                 r.ms = (now() - start) * 1000;
                 r.seq = seq;
+                r.generation = generation;
                 {
                     std::lock_guard l(resultMutex_);
-                    dropped_ += seq > seen ? seq - seen - 1 : 0;
+                    if (generation != trackingGeneration_ || paused_)
+                        continue;
+                    dropped_ += latest_.seq && seq > latest_.seq ? seq - latest_.seq - 1 : 0;
                     processed_++;
                     latest_ = std::move(r);
                 }
-                seen = seq;
-                if (!h.valid)
-                    for (int idle = 0; idle < 4 && !stop_ && !paused_; idle++)
-                        std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         } catch (const std::exception &e) {
             std::lock_guard l(resultMutex_);
@@ -501,24 +531,32 @@ void App::startWorkers() {
             std::shared_ptr<void> frame;
             Presentation display;
             {
-                std::lock_guard lock(frameMutex_);
-                if (!paused_ && frameSeq_ != seen) {
+                std::unique_lock lock(frameMutex_);
+                frameReady_.wait_for(lock, std::chrono::milliseconds(100), [this, seen] {
+                    return stop_ || (!paused_ && frame_ && frameSeq_ != seen);
+                });
+                if (stop_)
+                    break;
+                if (!paused_ && frame_ && frameSeq_ != seen) {
                     frame = frame_;
                     display.video = videoFrame_;
                     display.seq = frameSeq_;
                     display.time = frameTime_;
+                    display.generation = frameGeneration_;
                 }
             }
-            if (!frame) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            if (!frame)
                 continue;
-            }
+            seen = display.seq;
+            if (display.generation != trackingGeneration_)
+                continue;
             Result model;
             {
                 std::lock_guard lock(resultMutex_);
                 model = latest_;
             }
-            if (model.hand.valid && model.sourceFrame && model.hand.confidence >= .8) {
+            if (model.generation == display.generation && model.hand.valid && model.sourceFrame &&
+                model.hand.confidence >= .8) {
                 if (display.seq == model.seq)
                     display.hand = model.hand;
                 else {
@@ -542,7 +580,8 @@ void App::startWorkers() {
             seen = display.seq;
             {
                 std::lock_guard lock(presentationMutex_);
-                presentation_ = std::move(display);
+                if (display.generation == trackingGeneration_ && !paused_)
+                    presentation_ = std::move(display);
             }
         }
     });
@@ -592,7 +631,7 @@ void App::tick() {
         std::lock_guard lock(presentationMutex_);
         display = presentation_;
     }
-    const bool newVideo = display.seq != previewSeq_;
+    const bool newVideo = display.generation == trackingGeneration_ && display.seq != previewSeq_;
     if (newVideo) {
         previewSeq_ = display.seq;
         ++previewUpdates_;
@@ -602,7 +641,8 @@ void App::tick() {
     const bool fresh = r.seq != lastSeq_;
     if (fresh)
         lastSeq_ = r.seq;
-    if (paused_ || !r.error.isEmpty() || t - r.time > .25) {
+    if (paused_ || !r.error.isEmpty() || r.generation != trackingGeneration_ ||
+        !freshCapture(r.time, t)) {
         release();
         const QString text = paused_              ? "PAUSED — resume when ready"
                              : !r.error.isEmpty() ? "Camera or model unavailable — input stopped"
@@ -616,30 +656,24 @@ void App::tick() {
                            0, r, t);
         return;
     }
-    auto submitVisiblePointer = [&] {
-        if (!display.hand.valid || t - display.time > .1)
+    auto submitObservedPointer = [&] {
+        if (!r.hand.valid || r.hand.confidence < .8 || !r.hand.visible(8))
             return false;
-        if (display.seq == lastPointerSeq_)
+        if (r.seq == lastPointerSeq_)
             return true;
-        lastPointerSeq_ = display.seq;
-        const Point tip = display.hand.p[8];
+        lastPointerSeq_ = r.seq;
+        const Point tip = r.hand.p[8];
         const PointerMapping mapping{margin_->value(), topMargin_->value(), bottomMargin_->value()};
-        cursor_.submit(mapping.map(tip), display.time, smoothing_->value());
+        cursor_.submit(mapping.map(tip), r.time, smoothing_->value());
         return true;
     };
     if (!fresh) {
-        const auto mode = engine_.state();
-        if (newVideo && calibrated_ && input_->available() && r.hand.valid &&
-            r.hand.confidence >= .8 && (mode == "POINT" || mode == "PARTIAL POINT")) {
-            if (!submitVisiblePointer()) {
-                cursor_.hold();
-                input_->stopMotion();
-            }
-        }
         moveCursor(t);
         return;
     }
-    auto events = engine_.update(r.hand, t);
+    // Preview optical flow is visual only. Input and gesture dwell share the
+    // actual model observation and its camera timestamp.
+    auto events = engine_.update(r.hand, r.time);
     const auto mode = engine_.state();
     if (dwellChoice_->isChecked() && calibrated_ && input_->available() && mode == "POINT" &&
         r.hand.valid && !r.hand.partial() && r.hand.confidence >= .8 && t - r.time < .1 &&
@@ -674,7 +708,7 @@ void App::tick() {
         for (auto e : events) {
             switch (e.action) {
             case Action::Move: {
-                moving = submitVisiblePointer();
+                moving = submitObservedPointer();
                 break;
             }
             case Action::LeftClick:
@@ -757,6 +791,7 @@ QRect App::pointerBounds() const {
 }
 App::~App() {
     stop_ = true;
+    frameReady_.notify_all();
     release();
     if (capture_.joinable())
         capture_.join();
