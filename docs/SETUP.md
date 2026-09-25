@@ -8,7 +8,8 @@ start at the repository root unless stated otherwise. Build as a normal user.
 
 Requires Python 3.11+ (tested with 3.14), CMake 3.21+, C++20, Qt 6.6+
 Core/Gui/Qml/Quick/QuickControls2/Network/Widgets/Test, and LayerShellQt 6.6+ on
-Linux. Qt's QML test runner enables the interface tests.
+Linux. Qt's QML test runner enables the interface tests. Install Bubblewrap
+(`bwrap`) for project execution and the Linux sandbox tests.
 
 ```sh
 python3 -m venv .venv

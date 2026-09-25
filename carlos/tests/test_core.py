@@ -712,10 +712,11 @@ class VoiceStateTests(unittest.IsolatedAsyncioTestCase):
 
 
 class TelemetryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_threshold_emits_real_warning_event(self) -> None:
+    @patch("ev.telemetry.read_temperature", return_value={"celsius": 95.0, "sensor": "fixture"})
+    async def test_threshold_emits_real_warning_event(self, temperature_reader) -> None:
         bus = PhaxEventBus()
         sampler = TelemetrySampler(
-            bus, 1.0, {"warning_temperature_celsius": -1, "warning_repeat_seconds": 120}
+            bus, 1.0, {"warning_temperature_celsius": 90, "warning_repeat_seconds": 0}
         )
         stop = asyncio.Event()
         task = asyncio.create_task(sampler.run(stop))
