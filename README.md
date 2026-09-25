@@ -34,6 +34,9 @@ component independently; cloning this repository starts no services.
 ```sh
 git clone https://github.com/PhaxsScripting/C.A.R.L.O.S..git
 cd C.A.R.L.O.S.
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r carlos/requirements.txt
 PYTHONPATH=carlos/core python3 -m unittest discover -s carlos/tests
 ```
 

@@ -11,6 +11,6 @@ jobs:
         with:
           python-version: '3.14'
       - run: python tools/check-release.py
+      - run: pip install -r carlos/requirements.txt -r holohand/remote/requirements.lock
       - run: PYTHONPATH=carlos/core python -m unittest discover -s carlos/tests
-      - run: pip install -r holohand/remote/requirements.lock
       - run: python -m pytest holohand/remote/tests -q

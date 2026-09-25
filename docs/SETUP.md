@@ -11,6 +11,9 @@ Core/Gui/Qml/Quick/QuickControls2/Network/Widgets/Test, and LayerShellQt 6.6+ on
 Linux. Qt's QML test runner enables the interface tests.
 
 ```sh
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r carlos/requirements.txt
 PYTHONPATH=carlos/core python3 -m unittest discover -s carlos/tests
 cmake -S carlos/ui -B carlos/build/ui -DBUILD_TESTING=ON
 cmake --build carlos/build/ui -j2
@@ -36,7 +39,8 @@ a source build does not install them. Optional integrations need their own tools
 `carlos/scripts/install-user.sh` installs into your home, backs up replaced files,
 registers launchers, **enables login autostart**, and starts the core. `--no-start`
 prevents the immediate start but still registers autostart. Run it only when you
-want that behavior. `rollback-user.py` and `uninstall-user.sh` are beside it. The
+want that behavior. The installed launchers use system Python, which must also
+have the core dependencies installed through your distribution. `rollback-user.py` and `uninstall-user.sh` are beside it. The
 optional widget installer registers the widget; place it through Add Widgets.
 
 ## HoloHand
