@@ -2,34 +2,33 @@
 
 > I fucking hate Carlos. He doesn't respond on time.
 
-Phax's desktop assistant, hand controls, and phone dashboard. Built around Python,
-C++20, Qt/QML, and a browser client, with Gentoo KDE/Plasma as the main development
-platform.
+My desktop AI assistant. He talks, handles desktop tasks, remembers things you
+ask him to, and has a Qt control center with a voice HUD. Python for the core,
+C++ and QML for the UI. Built on Gentoo with KDE Plasma.
 
-**Early public source release.** This is working development code with automated
-tests, not a claim that the entire Carlos specification is finished. Speech
-latency, wake reliability, hardware integration, and portability still need work.
+Still working on him. Voice latency and wake reliability need work, and other
+desktops haven't had the same testing. This is a source release, so you'll need
+to set up your own speech runtimes and models.
 
 ## What's here
 
-| Folder | Job |
+| Folder | What's in it |
 | --- | --- |
-| [`carlos/core/ev`](carlos/core/ev) | Assistant, planning, tools, voice, permissions, local IPC, telemetry |
-| [`carlos/ui`](carlos/ui) | Qt/QML control center and voice HUD |
-| [`carlos/plasma`](carlos/plasma) | Optional Plasma voice activity widget |
-| [`carlos/sentinel`](carlos/sentinel) | Separate-node authenticated wake reference |
-| [`holohand/src`](holohand/src) | Camera tracking, gestures, calibration, desktop input |
-| [`holohand/remote`](holohand/remote) | Phone web app, passkey pairing, desktop, terminal, files |
+| [`carlos/core/ev`](carlos/core/ev) | AI providers, voice, memory, desktop tools, permissions and local IPC |
+| [`carlos/ui`](carlos/ui) | Control center and voice HUD |
+| [`carlos/plasma`](carlos/plasma) | Optional voice activity widget for Plasma |
+| [`carlos/assets`](carlos/assets) | Desktop bridge and wake word files |
+| [`carlos/scripts`](carlos/scripts) | Install, rollback, diagnostics and benchmarks |
+| [`carlos/tests`](carlos/tests) | Core and UI tests |
+| [`docs`](docs) | Setup, usage and test results |
 
-The phone app is an installable web app: open it in Safari and add it to the Home
-Screen. It is not a native App Store binary. Remote access uses your own private
-network and HTTPS setup. Model weights, credentials, personal settings, runtime
-data, and compiled dependencies are not shipped.
+This repo is just Carlos now. HoloHand, the phone app and the separate wake
+server aren't included. Carlos still has optional hooks for those apps if you
+install them separately. They aren't needed to build or test the assistant.
 
 ## Get started
 
-Read [building and setup](docs/SETUP.md) before installing. Build and test each
-component independently; cloning this repository starts no services.
+Read [setup](docs/SETUP.md) for dependencies and the UI build.
 
 ```sh
 git clone https://github.com/PhaxsScripting/C.A.R.L.O.S..git
@@ -40,12 +39,14 @@ pip install -r carlos/requirements.txt
 PYTHONPATH=carlos/core python3 -m unittest discover -s carlos/tests
 ```
 
-See [style](STYLE.md), [security](SECURITY.md), and
-[third-party notices](THIRD_PARTY.md). Old `ev` commands and identifiers remain
-for compatibility. Internal helpers include `PhaxEventBus`, `CarlosCore`,
-`GiggleGuard`, and `BigBootyBudget`; the jokes stop at permission boundaries.
+Cloning and building won't start Carlos. The user installer does enable login
+startup, so read its notes before running it. Models, keys and personal data stay
+on your machine. The old `ev` names are still there so existing installs work.
+
+[Using Carlos](docs/USAGE.md) · [Test results](docs/VALIDATION.md) ·
+[Security](SECURITY.md) · [Third-party notices](THIRD_PARTY.md)
 
 ## License
 
-Original project code is [MIT](LICENSE), copyright Phax. Bundled third-party
-sources and patches retain their own licenses; see [the notices](THIRD_PARTY.md).
+Original code is [MIT](LICENSE), copyright Phax. Dependencies, models and voices
+keep their own licenses.

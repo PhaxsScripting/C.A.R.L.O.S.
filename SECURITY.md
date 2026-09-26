@@ -1,14 +1,12 @@
 # Security
 
-This project can control a desktop, execute commands, and access files. Pair only
-your own devices and review every permission. Keep the remote backend on loopback
-and use private HTTPS access; do not expose it with a public port forward or
-Tailscale Funnel. Changing the HTTPS origin can require pairing again.
+Carlos can control your desktop, run commands and access files. Run it as your
+normal user. Review requested permissions and file targets before approving
+changes. Keep the local IPC socket and model endpoints private.
 
-Keep credentials, passkeys, recovery material, recordings, screenshots, and local
-state out of Git. The repository includes no production keys. Tests use disposable
-fixtures. Do not post tokens or private logs in public issues.
+Keep keys, recordings, screenshots, memory databases and local state out of Git.
+Tests use disposable fixtures. Don't post tokens or private logs in issues.
 
-For a vulnerability, use GitHub's private vulnerability reporting if enabled on
-this repository. Otherwise open a minimal issue asking for a private contact
-without including exploit details or secrets.
+For a vulnerability, use GitHub's private vulnerability reporting if it's
+enabled here. Otherwise open a short issue asking for a private contact without
+posting exploit details or secrets.

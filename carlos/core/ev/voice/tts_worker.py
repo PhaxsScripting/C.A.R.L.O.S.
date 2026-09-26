@@ -22,8 +22,8 @@ def main() -> int:
     parser.add_argument("--config", required=True)
     arguments = parser.parse_args()
 
-    # Piper's convenience loader enables ONNX's automatic thread pool. Keep
-    # this short, latency-sensitive workload on one non-spinning CPU thread.
+    # Piper's default ONNX pool uses extra threads. One non-spinning
+    # thread is enough for this short speech job.
     options = onnxruntime.SessionOptions()
     options.intra_op_num_threads = 1
     options.inter_op_num_threads = 1

@@ -48,8 +48,8 @@ _RETRIEVAL_STOP_WORDS = frozenset(
 
 def _ranked_tools(query, catalog):
     """Registry-derived retrieval, never a user-intent or execution router."""
-    # Literal paths/URLs/filenames identify targets, not capability keywords.
-    # Keep them intact in the actual user prompt; strip only the retrieval copy.
+    # Dont use file paths as search keywords. Only strip the search copy;
+    # keep the user's actual prompt intact.
     retrieval = re.sub(
         r"(?<!\w)(?:https?://[^\s]+|/[^\s]+|[A-Za-z0-9_-]+\.[A-Za-z0-9_.-]+)", " ", query
     )
@@ -109,17 +109,15 @@ def seed_tools(query, catalog):
     exact = next((name for name in catalog if query.strip().casefold() == name.casefold()), None)
     if exact:
         return [exact]
-    # A lone incidental noun should not drag an unrelated mutating schema into
-    # ordinary conversation. This is retrieval confidence, not an intent gate:
-    # full discovery is still available to the model on every request.
+    # One random noun shouldn't pull in unrelated tools.
+    # The model can still discover the full list.
     ranked = [
         (name, terms)
         for name, terms in _ranked_tools(query, catalog)
         if len(terms) >= 2 or query.casefold() == name.casefold()
     ][:2]
-    # Don't prime a weaker namespace-only substitute when the top definition
-    # covers every matching term and adds the requested operation. Discovery
-    # remains available; this prunes schemas, never dispatches an action.
+    # Skip weaker matches when the top tool covers the whole request.
+    # This only trims suggestions; it never runs a tool.
     if len(ranked) == 2 and ranked[1][1] < ranked[0][1]:
         ranked = ranked[:1]
     return [name for name, _ in ranked]
@@ -129,8 +127,7 @@ class LocalAgentProvider(LocalLlamaProvider):
     """Candidate local brain: no fixed phrase gate, no direct OS authority."""
 
     name = "local_agent"
-    # Preserve unresolved multi-step wording for the model. The service still
-    # runs verified high-confidence TaskPlanner fast paths before this adapter.
+    # Let the model handle requests the planner could not resolve.
     interprets_all_requests = True
 
     async def _post(self, messages, tools):
@@ -163,9 +160,8 @@ class LocalAgentProvider(LocalLlamaProvider):
 
     async def prewarm_with_tools(self, tools):
         if bool(self.config.get("prewarm", True)):
-            # Warm the same registry/discovery prefix used by conversation.
-            # The base class's tool-free prefix cannot prime this template.
-            # Any returned tool call is discarded here, never executed.
+            # Warm the tool prefix used for real conversations.
+            # Throw away any tool call returned here.
             await self._bounded_discover(
                 [{"role": "user", "content": "Reply with just OK. Do not request tools."}],
                 tools,
@@ -210,8 +206,8 @@ class LocalAgentProvider(LocalLlamaProvider):
         messages = [{"role": "system", "content": instructions}] + [
             m for m in messages if m.get("role") != "system"
         ]
-        # One correction of a promise before execution is safe; retrying a
-        # promise after real tool results could replay already-applied effects.
+        # Retry a promise once before any tool runs. After that, dont risk
+        # repeating something Carlos already did.
         has_prior_execution = any(
             call.get("function", {}).get("name", "").replace("__", ".")
             not in {FIND_TOOLS["name"], LOAD_TOOLS["name"]}
@@ -276,10 +272,8 @@ class LocalAgentProvider(LocalLlamaProvider):
                     raise ValidationError("Unknown, duplicate or disallowed tool requested")
             except (ValidationError, KeyError, TypeError) as error:
                 raise ProviderDecisionError(f"Local tool discovery rejected: {error}") from error
-            # A long task may need more than sixteen distinct capabilities,
-            # without needing sixteen old schemas in every next decision.
-            # Rotate the bounded definition window; receipts/history remain
-            # intact, and evicted names must be explicitly rediscovered.
+            # Rotate old tool definitions out as a long task adds new ones.
+            # Keep the receipts; dropped tools need to be discovered again.
             for name in names:
                 selected.pop(name, None)
                 selected[name] = catalog[name]
@@ -338,9 +332,8 @@ class LocalAgentProvider(LocalLlamaProvider):
             )
         messages.append({"role": "user", "content": user_text})
         catalog = self._catalog(tools)
-        # Retrieval only seeds schemas; the model still decides whether to act.
-        # Keep at most two initially to avoid a costly discovery round for an
-        # obvious capability match, without shipping 203 full schemas.
+        # Start with at most two matching tools to save a discovery round.
+        # The model still decides whether to use them.
         return await self._bounded_discover(messages, tools, seed_tools(user_text, catalog))
 
     async def continue_with_tools(self, turn, outputs, tools):

@@ -78,8 +78,7 @@ _NAMED_KEYS = {
 
 
 def _desktop_command_text(text: str) -> str:
-    # Only strip an invocation prefix. Voice cleanup must never rewrite text
-    # which the user has explicitly asked us to type.
+    # Strip the invocation, but dont rewrite text the user asked us to type.
     text = re.sub(
         r"^\s*(?:hey\s+)?(?:e\.?\s*v\.?|eve|evie)\b[\s,;:!.-]*", "", text, flags=re.IGNORECASE
     )

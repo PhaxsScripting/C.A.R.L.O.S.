@@ -67,9 +67,8 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
         setStatus(QStringLiteral("Secure local core connected"));
         refreshSnapshot();
         sendRequest(QStringLiteral("conversation.list"), {{QStringLiteral("limit"), 100}});
-        // Subscribe first so no event can fall into the gap between fetching
-        // history and establishing the live stream. Sequence de-duplication in
-        // processEvent safely merges any overlap with the history response.
+        // Subscribe before fetching history so no events slip through.
+        // processEvent drops duplicates from the overlap.
         sendRequest(QStringLiteral("subscribe"));
         sendRequest(QStringLiteral("events.history"), {{QStringLiteral("limit"), 120}});
         refreshMemories();
@@ -136,7 +135,7 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
 }
 
 void EvClient::activateCore() {
-    // Never activate the real desktop core from isolated test/custom sockets.
+    // Test sockets shouldn't wake the real desktop core.
     const QString runtime = QString::fromLocal8Bit(qgetenv("XDG_RUNTIME_DIR"));
     if (runtime != QStringLiteral("/run/user/%1").arg(static_cast<qulonglong>(getuid())))
         return;
@@ -220,8 +219,7 @@ QString EvClient::sendRequest(const QString &type, const QJsonObject &payload) {
         setStatus(QStringLiteral("Cannot send request: core is offline"));
         return {};
     }
-    // Snapshots and plan updates can arrive in bursts during speech/tool use.
-    // Keep only one in flight; a completed snapshot observes current state.
+    // One snapshot at a time. Speech and tool updates can pile up fast.
     if (type == QStringLiteral("snapshot") || type == QStringLiteral("plan.list")) {
         for (auto pending = m_pendingRequests.cbegin(); pending != m_pendingRequests.cend();
              ++pending) {
@@ -276,7 +274,7 @@ void EvClient::setWakePaused(bool paused) {
 void EvClient::stopSpeaking() { sendRequest(QStringLiteral("tts.stop")); }
 void EvClient::refreshConfirmations() { sendRequest(QStringLiteral("confirmation.list")); }
 void EvClient::stopCore() {
-    // An explicit Stop/Quit must not be undone by auto-recovery.
+    // If the user hit Stop, dont bring Carlos right back.
     m_reconnectEnabled = false;
     m_reconnectTimer.stop();
     m_activationTimeout.stop();
@@ -519,8 +517,8 @@ void EvClient::processEvent(const QJsonObject &event, bool historical) {
     }
     const bool audioSample =
         type == QStringLiteral("voice.audio_level") || type == QStringLiteral("tts.audio_level");
-    // Waveforms have dedicated properties. Feeding their 10-20 Hz samples
-    // into the event list rebuilt the entire graph and event delegates too.
+    // Keep waveform samples out of the event list. Rebuilding the whole
+    // graph 10-20 times a second for mic levels was a bit much.
     if (!audioSample) {
         const QVariantMap item = event.toVariantMap();
         const qint64 sequence = item.value(QStringLiteral("sequence")).toLongLong();
@@ -547,7 +545,7 @@ void EvClient::processEvent(const QJsonObject &event, bool historical) {
         if (!duplicate && !m_eventRefreshTimer.isActive())
             m_eventRefreshTimer.start();
     }
-    // History is a log, not a replay of old actions/status/confirmation UI.
+    // Old events are just history. Dont replay their actions or approval dialogs.
     if (historical)
         return;
     if (!audioSample)

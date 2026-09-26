@@ -1,15 +1,19 @@
-# Building and setup
+# Setup
 
-Developer source release. Gentoo KDE/Plasma is the primary environment; FreeBSD
-scripts are experimental and were not validated in this release. Commands below
-start at the repository root unless stated otherwise. Build as a normal user.
+Gentoo KDE Plasma is where I work on Carlos. FreeBSD scripts are included, but
+that port hasn't been validated for this release. Run these commands from the
+repo root as your normal user.
 
-## Carlos
+## What you need
 
-Requires Python 3.11+ (tested with 3.14), CMake 3.21+, C++20, Qt 6.6+
-Core/Gui/Qml/Quick/QuickControls2/Network/Widgets/Test, and LayerShellQt 6.6+ on
-Linux. Qt's QML test runner enables the interface tests. Install Bubblewrap
-(`bwrap`) for project execution and the Linux sandbox tests.
+- Python 3.11+; tested with 3.14.
+- CMake 3.21+, a C++20 compiler and Qt 6.6+ with Core, Gui, Qml, Quick,
+  QuickControls2, Network, Widgets and Test.
+- LayerShellQt 6.6+ on Linux for the voice HUD.
+- Qt's `qmltestrunner` for the QML tests.
+- Bubblewrap (`bwrap`) for sandboxed project execution and its Linux tests.
+
+Install the native packages through your distro, then set up Python and build:
 
 ```sh
 python3 -m venv .venv
@@ -21,103 +25,57 @@ cmake --build carlos/build/ui -j2
 ctest --test-dir carlos/build/ui --output-on-failure
 ```
 
-Explicit development run:
+CTest should list both `ev-client-tests` and `ev-interface-tests`. If the second
+one is missing, install `qmltestrunner` and configure CMake again.
+
+## Run from source
+
+With the venv active:
 
 ```sh
 PYTHONPATH=carlos/core python3 -m ev
-# In another shell:
+```
+
+In another terminal at the repo root:
+
+```sh
+. .venv/bin/activate
 carlos/build/ui/ev-ui
-PYTHONPATH=carlos/core python3 -m ev.cli health
 ```
 
-Configuration is `~/.config/ev/config.json`; data/state follow XDG directories.
-Review [`DEFAULT_CONFIG`](../carlos/core/ev/config.py) and set your own paths.
-Local speech and reasoning require separately installed whisper.cpp, Piper,
-wake/VAD runtimes, and model files. No weights or credentials are supplied. Check
-the license of each model and voice you choose. Missing runtimes are unavailable;
-a source build does not install them. Optional integrations need their own tools.
+Don't run a second core beside an installed one. Both use the same local socket
+and user configuration. See [usage](USAGE.md) for health checks and controls.
 
-`carlos/scripts/install-user.sh` installs into your home, backs up replaced files,
-registers launchers, **enables login autostart**, and starts the core. `--no-start`
-prevents the immediate start but still registers autostart. Run it only when you
-want that behavior. The installed launchers use system Python, which must also
-have the core dependencies installed through your distribution. `rollback-user.py` and `uninstall-user.sh` are beside it. The
-optional widget installer registers the widget; place it through Add Widgets.
+## Models and voice
 
-## HoloHand
+Settings live in `~/.config/ev/config.json` by default. Data and state follow the
+XDG directories. [`DEFAULT_CONFIG`](../carlos/core/ev/config.py) has the full list
+of settings, including runtime paths you need to change for your machine.
 
-Requires CMake 3.21+, C++20, Qt6 Core/Gui/Widgets/Network/DBus, OpenCV 4.8+ with DNN
-and video, X11/XTest development libraries, and a camera. Linux input uses uinput;
-FreeBSD uses X11. OpenVINO is optional and disabled by default.
+The default `offline` provider handles a limited set of commands. It isn't a
+chat model. For local conversation, install llama.cpp and a compatible GGUF model,
+then configure `providers.local_llama` and set `providers.active` to
+`local_agent`. Check the model's license before downloading it.
 
-```sh
-cmake -S holohand -B holohand/build
-cmake --build holohand/build -j2
-ctest --test-dir holohand/build --output-on-failure
-python3 holohand/scripts/fetch-models.py
-```
+Voice needs its own setup: whisper.cpp for transcription, Piper for speech,
+and the configured wake/VAD runtimes and models. The Python requirements here
+only cover the core. They don't install model weights or those runtimes.
+Set their paths in the `voice` config and check availability with `health`.
+Wake listening is off by default.
 
-The downloader verifies hashes in `holohand/models/sources.json`; licenses are in
-`holohand/vendor`. An administrator can run `holohand/scripts/setup-linux-input.sh
-USER` with the actual desktop username to grant uinput access. It loads the module
-and installs a persistent udev rule, refusing to replace a different rule. Do not
-run the tracker as root.
+Optional desktop tools need their own applications or system utilities. Missing
+HoloHand or mobile services don't prevent Carlos from running.
 
-`holohand/scripts/install-user.sh` installs binaries/models into `~/.local` and
-**enables login autostart**. Then launch `~/.local/bin/holohand --calibrate`.
-The uninstaller is beside the installer. Real-hand quality needs a physical test.
+## Install for your user
 
-## Phone web app
+Read `carlos/scripts/install-user.sh` before running it. It installs into your
+home directory, backs up replaced files, registers launchers, **enables login
+autostart**, and starts the core. `--no-start` skips starting it right now; it
+still enables autostart.
 
-Requires Python 3.11+, Node.js 20.19+ or 22.12+, and locked dependencies. This is
-an installable web app, not a signed iOS binary.
+The installed launchers use system Python. Install the core dependencies through
+your distro too; activating this repo's venv won't provide them to the launchers.
+`rollback-user.py` and `uninstall-user.sh` are in the same scripts folder.
 
-```sh
-cd holohand/remote
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.lock
-npm ci --ignore-scripts
-npm run build
-.venv/bin/python -m pytest tests -q
-npx playwright install chromium
-npm run test:browser -- browser.spec.js
-```
-
-The browser test uses a local server on port 8766 and fixture state under
-`~/.cache/holohand-browser-tests`. It checks pairing, a real terminal, file editing,
-and revocation. Other browser specs are opt-in live desktop tests and can send
-real input; they require configured native desktop dependencies.
-
-Review `scripts/install-user.sh` before deployment: it installs dependencies,
-builds the client, creates a launcher, **enables autostart**, and starts the
-backend. It listens on loopback port 8765. Set your own private HTTPS origin in
-`~/.local/state/holohand-remote/config.json`:
-
-```json
-{"origin":"https://YOUR-COMPUTER.YOUR-TAILNET.ts.net"}
-```
-
-Configure private Tailscale Serve for that loopback endpoint and sign in on both
-devices. Do not use public Funnel. The network helper prints guidance without
-changing firewall/DNS. `install-system.sh` is Gentoo/OpenRC-specific: review its
-package and boot-service changes before using it.
-
-Run `~/.local/bin/holohand-remote pair` locally for a five-minute code. Open your
-HTTPS URL in Safari, Add to Home Screen, then pair from that icon and approve the
-passkey prompt. Keep the private network connected for cellular access.
-
-Desktop streaming additionally needs KRDP, FreeRDP and Guacamole. The pinned
-manifest and patches are in `vendor`; `scripts/build-native.sh` builds them under
-`~/.local/opt`. It needs KDE/PipeWire/FreeRDP development libraries, autotools and
-native build dependencies. Provision `rdp.crt` and `rdp.key` in the private remote
-state directory; the desktop bridge pins the certificate fingerprint. Those
-files and native binaries are not shipped. Terminal/files do not require desktop
-streaming. The Codex integration needs a separately installed, authenticated CLI.
-
-## Sentinel and acceptance
-
-See [the node reference](../carlos/sentinel/README.md). It requires a separate
-always-on node. A computer cannot run its own wake service while powered off.
-Real iPhone, camera, microphone, audio, and physical wake acceptance are separate
-from automated release tests. This release does not assert the full specification
-is complete or universally portable.
+The optional Plasma widget has its own installer. After installing it, add it
+through Plasma's Add Widgets menu.

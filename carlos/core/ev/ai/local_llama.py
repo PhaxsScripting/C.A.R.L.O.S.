@@ -99,9 +99,8 @@ def _process_identity(pid: int) -> dict[str, Any] | None:
         ]
     except (IndexError, OSError, StopIteration, ValueError):
         return None
-    # A PID can be recycled between individual /proc reads. Reject the entire
-    # sample unless the immutable start tick is identical on both sides of
-    # the UID/executable/argv reads.
+    # Check the start tick before and after reading /proc.
+    # Same PID does not always mean same process.
     start_time_after = _process_start_time(root)
     if not command or start_time_after is None or start_time_before != start_time_after:
         return None
@@ -637,9 +636,7 @@ class LocalLlamaProvider(Provider):
 
         pidfd: int | None = None
         try:
-            # Reclaiming a process discovered by PID is safe only through a
-            # pidfd. Without one, fail closed rather than introduce a
-            # check-then-kill PID-reuse race.
+            # Use a pidfd or leave it alone. A reused PID could belong to another app.
             pidfd_open = getattr(os, "pidfd_open", None)
             pidfd_send_signal = getattr(signal, "pidfd_send_signal", None)
             if not callable(pidfd_open) or not callable(pidfd_send_signal):
@@ -712,8 +709,8 @@ class LocalLlamaProvider(Provider):
             self._remove_ownership_record(record)
 
         if await self._healthy():
-            # A loopback health response without a verified E.V. owner record
-            # is not sufficient provenance. Never send prompts to it or kill it.
+            # A health reply doesn't prove this server is ours.
+            # Dont send prompts or kill it without checking the owner record.
             raise ProviderError("An unowned service is already using the local model endpoint")
         return False
 
@@ -731,8 +728,7 @@ class LocalLlamaProvider(Provider):
                 raise ProviderError(reason)
             if self._process is not None and self._process.returncode is None:
                 raise ProviderError("The local model server is still loading")
-            # Reject new workloads before loading model weights or creating a
-            # child. Repeated wake requests must not restart a hot runtime.
+            # Dont load more weights while the machine is already too hot or low on RAM.
             await self._check_resources()
             spawning = asyncio.create_task(
                 asyncio.create_subprocess_exec(
@@ -764,9 +760,8 @@ class LocalLlamaProvider(Provider):
                     self._write_ownership_record(record)
                 await self._wait_until_ready()
             except BaseException:
-                # Cancellation/resource failure while weights load must not
-                # leave an owned heavy child consuming CPU after the caller
-                # has stopped waiting. close retains immutable PID safeguards.
+                # Clean up our child if loading gets cancelled or hits a resource limit.
+                # close() still checks process identity before stopping it.
                 await self.close()
                 raise
 
@@ -929,8 +924,7 @@ class LocalLlamaProvider(Provider):
         )
 
     async def _run_guarded(self, request_factory):
-        # Guard only the runtime this adapter demonstrably owns. External
-        # endpoints must never be signalled or treated as local child workloads.
+        # Only manage servers we own. External endpoints aren't our processes.
         guarded = self._owns_process and self._server_identity is not None
         if not guarded:
             return await request_factory()
@@ -971,8 +965,7 @@ class LocalLlamaProvider(Provider):
             "temperature": 0.15 if tools else float(self.config.get("temperature", 0.6)),
             "max_tokens": self._output_token_budget(messages, tools),
             "cache_prompt": bool(self.config.get("prompt_cache", True)),
-            # Small local reasoning models otherwise spend the speech budget
-            # generating hidden thought. Opt in explicitly for deeper tasks.
+            # Hidden thinking eats the speech budget. Deeper tasks can opt in.
             "chat_template_kwargs": {
                 "enable_thinking": bool(self.config.get("enable_thinking", False))
             },
@@ -980,8 +973,7 @@ class LocalLlamaProvider(Provider):
             # its prefix. Reuse matching chunks after old turns are dropped.
             "n_cache_reuse": max(0, min(256, int(self.config.get("cache_reuse_tokens", 64)))),
         }
-        # A structured answer is a complete JSON decision, not speakable text.
-        # Never sentence-stream partial JSON even with an empty tool catalog.
+        # JSON decisions aren't speech. Wait for the full thing before using it.
         casual = (
             response_schema is None
             and not tools
@@ -989,9 +981,8 @@ class LocalLlamaProvider(Provider):
         )
         if casual and bool(self.config.get("sentence_streaming", True)):
             payload["stream"] = True
-        # llama.cpp builds a grammar whenever tool_choice is present. An empty
-        # function list produces an invalid grammar, stranding ordinary chat in
-        # OFFLINE even though the local model process itself is healthy.
+        # llama.cpp builds a grammar for tool_choice even with zero tools.
+        # Skip it for plain chat or the empty grammar breaks the request.
         if response_schema is not None:
             payload["response_format"] = {
                 "type": "json_schema",
@@ -1172,9 +1163,8 @@ class LocalLlamaProvider(Provider):
             {"role": "system", "content": self._system_instructions()}
         ]
         for item in self._conversation_context(user_text, context):
-            # Reproduce the same formatting for previous user turns. Otherwise
-            # every follow-up invalidates the cached prompt at the first user
-            # message and needlessly reprocesses the entire conversation.
+            # Keep old user turns formatted the same way, cause changing them
+            # invalidates the prompt cache on every follow-up.
             if (
                 item["role"] == "user"
                 and not model_tools
@@ -1340,9 +1330,8 @@ class LocalHybridProvider(Provider):
         )
         if not imperative and not desktop_status:
             return []
-        # Select from the current request only. Old tool-result language in the
-        # conversation must not make every later casual question resend the
-        # full catalog.
+        # Pick tools for this request. Old tool results shouldn't drag the
+        # whole catalog into a casual reply.
         lowered = text.casefold()
 
         def mentions(*terms: str) -> bool:

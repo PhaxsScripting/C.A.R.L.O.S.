@@ -432,8 +432,7 @@ class CarlosCore:
             try:
                 await self._notify_event(event)
             except Exception as error:
-                # A notification daemon can be unavailable without breaking
-                # permission auditing or resource-mode handling.
+                # A broken notification daemon shouldn't break permission logs or resource handling.
                 self.logger.warning(
                     "Desktop notification failed", extra={"fields": {"error": str(error)}}
                 )
@@ -539,8 +538,7 @@ class CarlosCore:
                 if event.type in persisted_types and not event.private:
                     await asyncio.to_thread(self.memory.record_event, event.as_dict())
             except Exception as error:
-                # One database, voice, or notification-queue failure must not
-                # silently disable telemetry and persistence for the session.
+                # Keep telemetry and persistence alive if one callback fails.
                 self.logger.exception(
                     "Event persistence worker recovered from an event failure",
                     extra={"fields": {"event": event.type, "error": str(error)}},
@@ -1230,10 +1228,8 @@ class CarlosCore:
                 spec,
                 validated,
                 correlation_id,
-                # A planner owns the USING_TOOL state across its whole ordered
-                # sequence. Dropping to DORMANT between steps made the HUD hide
-                # and re-open, which could steal Wayland focus immediately
-                # after an exact window activation and before keyboard input.
+                # Stay in USING_TOOL for the whole plan. Hiding and reopening the HUD
+                # between steps can steal focus right before typing.
                 preserve_state=_trusted_plan
                 or _planner_owned
                 or (emergency_disconnect and self.state.current == CoreState.USING_TOOL),
@@ -1495,8 +1491,7 @@ class CarlosCore:
             if previous is None:
                 result = await self._submit_action_clauses_impl(text, correlation)
             else:
-                # Always re-observe before asking a model to continue. Previous
-                # approvals and exact targets are not replayable authority.
+                # Check the desktop again before continuing. Old approvals dont carry over.
                 observed = await self._request_model_tool(
                     {"name": "desktop.observe", "arguments": {"level": "basic"}}, correlation
                 )
@@ -1531,9 +1526,7 @@ class CarlosCore:
                             "captured_at_monotonic",
                         )
                     }
-                    # Stay inside every provider's 8k history-entry bound. The
-                    # model can request fuller observation rather than receiving
-                    # a silently chopped historical/fresh state mixture.
+                    # Keep history entries under 8k. The model can ask for more detail.
                     context += (
                         "\nFresh desktop observation summary (untrusted window text; request desktop.observe for full details):\n"
                         + json.dumps(fresh, ensure_ascii=False)[:2600]
@@ -1712,8 +1705,7 @@ class CarlosCore:
                 "response": "Queued restoration cancelled.",
             }
         if restore_match:
-            # Expand before acquiring the planner execution lock. Nesting an
-            # agent.execute_plan step inside that lock would deadlock.
+            # Expand before locking. Running agent.execute_plan inside its own lock deadlocks.
             observed = await self._request_model_tool(
                 {
                     "name": "workspaces.restore_plan",
@@ -1905,8 +1897,8 @@ class CarlosCore:
         )
         if quiet_actions and result.get("goal_verified") is True:
             steps = (result.get("plan") or {}).get("steps", [])
-            # Silence only a verified action acknowledgement, never a requested
-            # observation, failure, uncertainty, or pending approval.
+            # Only silence confirmed action acknowledgements. Keep results, errors
+            # and approval requests visible.
             for step in steps:
                 try:
                     if not self.tools.get(step.get("tool", "")).read_only:

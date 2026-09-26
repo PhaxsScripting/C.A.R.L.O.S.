@@ -2,8 +2,8 @@
 #include <cstdint>
 #include <deque>
 
-// Once exhausted, recovery requires an explicit user retry. A successful
-// short-lived connection does not erase a repeated-crash history.
+// Too many crashes? Wait for the user to retry.
+// A brief connection doesn't wipe the crash count.
 class BigBootyBudget {
   public:
     bool take(std::int64_t nowMs) {

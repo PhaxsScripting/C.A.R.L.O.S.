@@ -82,9 +82,8 @@ def strip_command_asides(text: str) -> str:
 def request_text(text: str) -> str | None:
     text = text.strip().replace("’", "'")
     text = strip_command_asides(text)
-    # Strip conversational wrappers, then re-run all the discussion/negation
-    # guards. Preserve "can you create/help" so a capability question cannot
-    # become an instruction merely by removing "just" or "please".
+    # Check negation again after stripping filler. Keep capability questions
+    # as questions, even if they start with just or please.
     for _ in range(8):
         unwrapped = re.sub(
             r"^(?:(?:please|just|actually|go\s+ahead\s+and|do\s+me\s+a\s+favor\s+and)[,\s]+)+",
@@ -129,8 +128,7 @@ def request_text(text: str) -> str | None:
         re.I,
     ):
         return None  # Creating/discussing a tool is not running a local scan.
-    # Capability questions and discussion are not permission to operate on
-    # whatever desktop noun happens to occur in the sentence.
+    # Talking about an app isn't permission to control it.
     if re.match(
         r"^(?:why\b|(?:do|did|does|should|would|could|can|am|are|is)\s+(?:i|we|it|they|a|an)\b|"
         r"(?:what|how)\s+(?:does|did|do|would|should)\b|what\s+(?:is|are)\s+(?:a|an)\b|"

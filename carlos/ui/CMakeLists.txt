@@ -6,8 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network Widgets)
-# The voice HUD uses a compositor-enforced non-focusable layer on KDE Wayland.
-# Its QML runtime module is supplied by this existing Plasma component.
+# LayerShellQt keeps the HUD from stealing keyboard focus on KDE Wayland.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_package(LayerShellQt 6.6 REQUIRED)
 endif()

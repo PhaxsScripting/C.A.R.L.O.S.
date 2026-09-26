@@ -13,9 +13,8 @@ from .protocol import PROTOCOL_VERSION, ProtocolError, decode_message, encode_me
 
 RequestHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 
-# These requests inspect state or interrupt work. Ordinary commands and tool
-# executions stay ordered on each connection, while the UI can still stop
-# speech or inspect progress during a long operation.
+# Let status and stop requests through while a command is busy.
+# Normal commands and tools still run in order on each connection.
 RESPONSIVE_REQUESTS = frozenset(
     {
         "carlos.status",

@@ -296,7 +296,7 @@ def run(gestures=False, layout=False, picker=False, local_model=None):
         inspected = tool("desktop.controls.inspect", identity)
         if not inspected.get("text_available") or inspected.get("text_truncated"):
             raise RuntimeError("Owned field text was not completely observable")
-        desired = "Generic field ✓ " + uuid.uuid4().hex[:8]
+        desired = "Generic field café " + uuid.uuid4().hex[:8]
         plan = tool(
             "agent.execute_plan",
             {

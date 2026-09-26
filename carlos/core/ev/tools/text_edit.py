@@ -90,8 +90,7 @@ def _replace(arguments, context, cancelled):
     if len(updated) > maximum or updated == data:
         raise ValidationError("Replacement exceeds the size limit or does not change the file")
     guard()
-    # Retain the original even if a later operation fails; never delete recovery
-    # data automatically after publication or an uncertain outcome.
+    # Keep the backup even if a later step fails. Dont auto-delete recovery files.
     backup_directory = Path(tempfile.mkdtemp(prefix=".ev-text-backup-", dir=path.parent))
     backup = backup_directory / "original"
     _write_private(backup, data)

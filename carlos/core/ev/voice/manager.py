@@ -340,15 +340,13 @@ class VoiceManager:
             try:
                 candidate = await self._current_source()
             except (OSError, RuntimeError):
-                # Keep the working stream when PipeWire/Pulse is briefly
-                # unavailable. The normal capture supervisor still handles a
-                # recorder that actually exits.
+                # A brief PipeWire failure shouldn't kill a working capture stream.
+                # The supervisor handles recorders that actually exit.
                 continue
             if not candidate or candidate == "@DEFAULT_SOURCE@" or candidate == active_source:
                 continue
             if self.capture_active:
-                # Do not cut off a command that began on the previous input.
-                # The next poll switches as soon as that interaction finishes.
+                # Let the current command finish before switching microphones.
                 continue
             return candidate
         return ""
@@ -650,8 +648,7 @@ class VoiceManager:
                         "input_dc_offset": levels["dc_offset"],
                     }
                 )
-                # Publish low-rate real ambient levels; the dashboard should
-                # not show a dead microphone until after a successful wake.
+                # Show mic levels before the first wake too, so it doesn't look dead.
                 self.bus.publish("voice.audio_level", "voice", {**levels, "ambient": True})
                 last_emit = now
             if (
@@ -761,8 +758,7 @@ class VoiceManager:
         if isinstance(port, dict):
             port = port.get("name", "")
         port = str(port).casefold()
-        # The active connector takes precedence over the device's generic
-        # description: a headset-capable sound card can still use speakers.
+        # Check the active port. A headset-capable card might be using speakers.
         if "speaker" in port or "hdmi" in port or "lineout" in port:
             return False
         return (
@@ -791,8 +787,8 @@ class VoiceManager:
             ]
             self._media_playing = bool(streams)
             if streams:
-                # Use each stream's actual sink, not the default output. A
-                # movie in headphones must not block bare E.V. or follow-ups.
+                # Check where each stream actually plays. A movie in headphones
+                # shouldn't block wake words or follow-ups.
                 sinks = {
                     str(sink.get("index")): sink for sink in await self._audio_listing("sinks")
                 }
@@ -802,8 +798,7 @@ class VoiceManager:
                     for stream in streams
                 )
         except (OSError, ValueError, asyncio.TimeoutError):
-            # If playback was found but its route is unknown, retain the
-            # speaker guard. Do not guess that unknown outputs are headphones.
+            # Unknown output? Keep the speaker guard. Dont guess it's headphones.
             pass
         self._media_check_at = time.monotonic()
         return self._media_playing
@@ -1320,11 +1315,8 @@ class VoiceManager:
         )
         if seed:
             if mode == "wake_command" and not seed_is_command:
-                # The rolling buffer contains the wake phrase itself. Keep it
-                # available as transcription pre-roll, but do not let that
-                # phrase arm/end command VAD. Otherwise "E.V." followed by a
-                # short pause is mistaken for the entire command and capture
-                # closes before the user's request begins.
+                # Keep the wake phrase for transcription, but keep it out of command VAD.
+                # Otherwise a pause after the name ends capture before the request starts.
                 self.capture_pcm.extend(seed)
                 self.capture_bytes += len(seed)
                 self.capture_seed_bytes = len(seed)
@@ -1475,8 +1467,8 @@ class VoiceManager:
                 self.capture_auto_reason = "follow_up_timeout"
                 return True
         maximum_bytes = int(limit_seconds * 16000 * 2)
-        # The reply window is a wait-to-START timeout, never an eight-second
-        # guillotine on an utterance already in progress. Bound speech itself.
+        # The timeout is for starting a reply. Dont cut off someone mid-sentence.
+        # Speech has its own length limit.
         utterance_start = self.capture_speech_start_byte or self.capture_seed_bytes
         if self.capture_bytes - utterance_start >= maximum_bytes:
             self.capture_auto_reason = "capture_limit"
@@ -1717,11 +1709,8 @@ class VoiceManager:
                     )
                 return {"status": "no_speech", **stopped}
 
-            # Long waits before a push-to-talk utterance are not speech.  Feed
-            # Whisper the VAD-bounded utterance plus a conservative pre-roll
-            # and tail so neither edge is cut while silence hallucinations are
-            # avoided.  Manual stops without a detected boundary keep the
-            # complete capture.
+            # Trim the wait before speech so Whisper doesn't invent words in silence.
+            # Keep some audio at both edges. With no VAD boundary, keep the full clip.
             if speech_start is not None:
                 bounded_end = min(len(pcm), speech_end if speech_end is not None else len(pcm))
                 bounded_start = min(speech_start, bounded_end)
@@ -1810,10 +1799,8 @@ class VoiceManager:
                 transcript.latency_ms,
             )
 
-            # A mistaken app name is harmless for most commands but dangerous
-            # for an automatic close.  Re-run only explicit close commands
-            # through a different Whisper model and require target agreement.
-            # No prompt is shown and no captured audio is retained.
+            # Closing the wrong app would suck. Check explicit close requests with
+            # a second Whisper model and require the same target. No recording is kept.
             primary_close_targets = extract_close_targets(normalized)
             if primary_close_targets:
                 verification_available, verification_reason = self.stt.verification_available
@@ -2253,9 +2240,8 @@ class VoiceManager:
                 env=self._audio_env(),
             )
             self.tts_process = player
-            # Wake-word barge-in can arrive while paplay is being spawned,
-            # after the earlier post-synthesis cancellation check. Do not let
-            # that late player steal LISTENING back to SPEAKING.
+            # A wake word can land while paplay starts. Dont let that late player
+            # switch Carlos back to SPEAKING when he's already listening.
             if self.tts_cancel_reason:
                 await self._stop_process(player)
                 self.tts_process = None
@@ -2324,8 +2310,7 @@ class VoiceManager:
 
             meter_task = asyncio.create_task(report_levels())
             try:
-                # PulseAudio owns playback timing. Buffer the audio immediately;
-                # telemetry must never pace writes and starve the output stream.
+                # Feed playback right away. Waiting on telemetry here starves the audio.
                 if len(chunks) == 1 and continuation is None:
                     _stdout, stderr = await asyncio.wait_for(
                         player.communicate(pcm),

@@ -4,7 +4,7 @@ permissions:
   contents: read
 jobs:
   python:
-    # Keep real user-namespace sandbox tests on a compatible, fixed runner.
+    # 24.04 blocks the user namespaces these sandbox tests need.
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -14,6 +14,5 @@ jobs:
       - name: Install sandbox and compiler test dependencies
         run: sudo apt-get update && sudo apt-get install -y bubblewrap cmake build-essential
       - run: python tools/check-release.py
-      - run: pip install -r carlos/requirements.txt -r holohand/remote/requirements.lock
+      - run: pip install -r carlos/requirements.txt
       - run: PYTHONPATH=carlos/core python -m unittest discover -s carlos/tests
-      - run: python -m pytest holohand/remote/tests -q

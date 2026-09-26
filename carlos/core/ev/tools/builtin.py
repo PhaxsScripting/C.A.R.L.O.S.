@@ -136,10 +136,9 @@ def _process_matches_query(
                 return True
         elif any(candidate.issubset(set(key.split())) for key in process_keys):
             return True
-    # GUI display names often differ from their Linux process (for example an
-    # app called "Audio Center" may run phaxity-neko-music). Resolve a unique,
-    # high-confidence desktop entry and privately compare its launch/WM
-    # identities. Nothing from the process command line is returned.
+    # The display name might not match the process name. Find one clear
+    # desktop entry, then compare its launch and window identities.
+    # Keep process arguments private.
     return False
 
 
@@ -1534,8 +1533,8 @@ def get_git_status(arguments: dict[str, Any], context: ToolContext) -> dict[str,
 
 
 def build_project(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
-    # Keep the old public name for saved histories/clients, but never let it
-    # bypass the inspected, approved, cancellable sandbox runner.
+    # Old clients still use this name. It must go through the same
+    # approved sandbox runner.
     return {
         "ok": False,
         "executed": False,

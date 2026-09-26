@@ -87,8 +87,8 @@ def open_url(arguments, context):
                 f"Expected one installed {browser} browser; found {len(matches)}. No browser was launched."
             )
         desktop_id = matches[0]
-    # Pass the URL to the browser's desktop handler exactly once. No empty
-    # browser launch, keyboard portal, shell expansion or --new-window retry.
+    # Send the URL to the desktop handler once. No extra browser launch
+    # or shell expansion.
     try:
         result = subprocess.run(
             [_platform_executable("/usr/bin/gtk-launch"), desktop_id, url],
@@ -172,8 +172,8 @@ async def video_control(arguments, context):
             "The requested video control is missing or ambiguous in this browser window"
         )
     element = before[0]
-    # Bind again immediately before the click. There is no blind F key fallback
-    # that could type into a comment box or activate a different browser tab.
+    # Check the target again right before clicking. Guessing an F key
+    # could type into the wrong tab or a comment box.
     if await browser_scope(arguments, context) != (pid, title):
         raise RuntimeError("The browser page changed before video activation")
     accepted = await asyncio.to_thread(

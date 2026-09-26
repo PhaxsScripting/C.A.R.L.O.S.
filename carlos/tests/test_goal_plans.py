@@ -17,7 +17,7 @@ from ev.ai.nvidia import NvidiaProvider
 
 class PredicateTests(unittest.IsolatedAsyncioTestCase):
     async def test_text_predicate_hashes_literal_utf8_instead_of_asking_model_for_digest(self):
-        for text in ("", "hello", "hello\n", "café 🌙"):
+        for text in ("", "hello", "hello\n", "café 𝄞"):
             with self.subTest(text=text):
                 request = AsyncMock(
                     return_value={
