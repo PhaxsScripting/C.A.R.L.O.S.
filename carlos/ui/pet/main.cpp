@@ -22,6 +22,9 @@ int main(int argc, char **argv) {
     app.setApplicationDisplayName("Carlos Pet");
     app.setQuitOnLastWindowClosed(false);
     const bool preview = app.arguments().contains("--preview");
+    const bool background = app.arguments().contains("--background");
+    if (background && !QSettings("Carlos", "DesktopPet").value("launchWithCarlos", true).toBool())
+        return 0;
     auto bus = QDBusConnection::sessionBus();
     if (app.arguments().contains("--quit")) {
         QDBusInterface existing("org.phax.CarlosPet", "/Pet", "org.phax.CarlosPet", bus);
@@ -31,6 +34,8 @@ int main(int argc, char **argv) {
     }
     if (!preview && !bus.registerService("org.phax.CarlosPet")) {
         QDBusInterface existing("org.phax.CarlosPet", "/Pet", "org.phax.CarlosPet", bus);
+        if (background)
+            return 0;
         return existing.call("Show").type() == QDBusMessage::ErrorMessage ? 1 : 0;
     }
     PetController pet(preview);

@@ -14,6 +14,7 @@
 #include <QJsonObject>
 #include <QMenu>
 #include <QProcess>
+#include <QQuickWindow>
 #include <QRegion>
 #include <QScreen>
 #include <QStandardPaths>
@@ -22,6 +23,7 @@
 namespace {
 const QString service = "org.phax.CarlosPet";
 const QString plugin = "org.phax.carlos.pet.runtime";
+const QString dragPlugin = "org.phax.carlos.pet.drag";
 } // namespace
 
 PetController::PetController(bool preview, QObject *parent)
@@ -102,6 +104,7 @@ PetController::PetController(bool preview, QObject *parent)
 
 PetController::~PetController() { stop(); }
 void PetController::stop() {
+    endDrag();
     m_timer.stop();
     m_coreTimer.stop();
     m_core.abort();
@@ -113,10 +116,11 @@ void PetController::stop() {
 }
 bool PetController::shown() const {
     return !m_locked && !m_hidden && !m_corePrivate && m_clock.elapsed() >= m_snoozeUntil &&
-           !(m_fullscreen && m_settings.value("hideFullscreen", true).toBool());
+           !(m_fullscreen && m_settings.value("hideFullscreen", false).toBool());
 }
 void PetController::attach(QWindow *window) {
     m_window = window;
+    moveToScreen(QGuiApplication::screenAt(QCursor::pos()));
     position();
     auto mask = [this] {
         QRegion input(121, 92, 96, 100);
@@ -129,6 +133,19 @@ void PetController::attach(QWindow *window) {
     connect(window, &QWindow::screenChanged, this, [this] { position(); });
     connect(qApp, &QGuiApplication::screenRemoved, this, [this] { position(); });
 }
+void PetController::moveToScreen(QScreen *screen) {
+    if (!m_window || !screen || m_preview)
+        return;
+    const bool wasHidden = m_hidden;
+    // Remap the layer surface so KWin actually changes its output.
+    m_hidden = true;
+    emit changed();
+    m_window->setScreen(screen);
+    LayerShellQt::Window::get(m_window)->setScreen(screen);
+    position();
+    m_hidden = wasHidden;
+    emit changed();
+}
 void PetController::position() {
     if (!m_window || m_preview)
         return;
@@ -140,24 +157,75 @@ void PetController::position() {
     m_bottom = qBound(0, m_bottom, qMax(0, size.height() - m_window->height()));
     auto *layer = LayerShellQt::Window::get(m_window);
     layer->setMargins(QMargins(0, 0, m_right, m_bottom));
+    // Margins wait for a surface commit. Don't make the next click do it.
+    if (auto *quick = qobject_cast<QQuickWindow *>(m_window))
+        quick->update();
 }
 void PetController::beginDrag() {
+    endDrag();
     m_dragging = true;
-    m_dragStart = QCursor::pos();
+    m_dragMoved = false;
+    m_hasDragPointer = false;
     m_dragRight = m_right;
     m_dragBottom = m_bottom;
-}
-void PetController::drag() {
-    if (!m_dragging)
+    ++m_dragSerial;
+    emit dragChanged();
+    if (m_preview)
         return;
-    const auto delta = QCursor::pos() - m_dragStart;
-    m_right = m_dragRight - delta.x();
-    m_bottom = m_dragBottom - delta.y();
+    QFile source(":/pet/drag.js");
+    if (!source.open(QIODevice::ReadOnly)) {
+        m_dragging = false;
+        return;
+    }
+    QTemporaryFile file;
+    if (!file.open()) {
+        m_dragging = false;
+        return;
+    }
+    file.write(source.readAll()
+                   .replace("@SERIAL@", QByteArray::number(m_dragSerial))
+                   .replace("@PID@", QByteArray::number(QCoreApplication::applicationPid())));
+    file.flush();
+    QDBusInterface scripts("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting");
+    scripts.call("unloadScript", dragPlugin);
+    QDBusReply<int> loaded = scripts.call("loadScript", file.fileName(), dragPlugin);
+    if (!loaded.isValid() || loaded.value() < 0) {
+        m_dragging = false;
+        return;
+    }
+    QDBusInterface script("org.kde.KWin", QString("/Scripting/Script%1").arg(loaded.value()),
+                          "org.kde.kwin.Script");
+    if (script.call("run").type() == QDBusMessage::ErrorMessage)
+        endDrag();
+}
+void PetController::DragPointer(int x, int y, int serial) {
+    if (!calledFromDBus() || message().service() != m_kwinOwner || !m_dragging ||
+        serial != m_dragSerial)
+        return;
+    const QPointF pointer(x, y);
+    if (!m_hasDragPointer) {
+        m_dragStart = pointer;
+        m_hasDragPointer = true;
+        return;
+    }
+    const auto delta = pointer - m_dragStart;
+    if (!m_dragMoved) {
+        if (qAbs(delta.x()) + qAbs(delta.y()) <= 5)
+            return;
+        m_dragMoved = true;
+        emit dragChanged();
+    }
+    m_right = m_dragRight - qRound(delta.x());
+    m_bottom = m_dragBottom - qRound(delta.y());
     position();
 }
 void PetController::endDrag() {
+    if (!m_dragging)
+        return;
     m_dragging = false;
     if (!m_preview) {
+        QDBusInterface scripts("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting");
+        scripts.call("unloadScript", dragPlugin);
         m_settings.setValue("right", m_right);
         m_settings.setValue("bottom", m_bottom);
     }
@@ -168,18 +236,21 @@ void PetController::clearContext() {
 }
 void PetController::SetLocked(bool locked) {
     m_locked = locked;
-    if (locked)
+    if (locked) {
+        endDrag();
         clearContext();
-    else if (!m_preview) {
+    } else if (!m_preview) {
         startTracking();
         pollCore();
     }
     emit changed();
 }
-void PetController::Observe(const QString &app, bool fullscreen) {
+void PetController::Observe(const QString &app, bool fullscreen, const QString &screenName) {
     if (!calledFromDBus() || message().service() != m_kwinOwner)
         return;
     m_tracking = true;
+    if (m_needsScreen && m_window && MoveToScreen(screenName))
+        m_needsScreen = false;
     m_fullscreen = fullscreen;
     if (m_locked || m_corePrivate || quiet())
         clearContext();
@@ -190,7 +261,20 @@ void PetController::Observe(const QString &app, bool fullscreen) {
     emit changed();
 }
 void PetController::Quit() { QTimer::singleShot(0, qApp, &QCoreApplication::quit); }
+bool PetController::MoveToScreen(const QString &name) {
+    for (auto *screen : QGuiApplication::screens()) {
+        if (screen->name() == name) {
+            moveToScreen(screen);
+            return true;
+        }
+    }
+    return false;
+}
 void PetController::Show() {
+    m_needsScreen = true;
+    if (!m_preview)
+        startTracking();
+    moveToScreen(QGuiApplication::screenAt(QCursor::pos()));
     m_hidden = false;
     m_snoozeUntil = 0;
     emit changed();
@@ -257,6 +341,8 @@ void PetController::startTracking() {
     file.write(source.readAll());
     file.flush();
     QDBusInterface scripts("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting", bus);
+    if (!m_dragging)
+        scripts.call("unloadScript", dragPlugin);
     scripts.call("unloadScript", plugin);
     QDBusReply<int> loaded = scripts.call("loadScript", file.fileName(), plugin);
     if (!loaded.isValid() || loaded.value() < 0)
@@ -281,7 +367,13 @@ void PetController::menu() {
     };
     option("Quiet mode", "quiet", false);
     option("Reduced motion", "still", false);
-    option("Hide during fullscreen apps", "hideFullscreen", true);
+    option("Hide during fullscreen apps", "hideFullscreen", false);
+    option("Launch with Carlos", "launchWithCarlos", true);
+    auto *screens = menu.addMenu("Move to screen");
+    for (auto *screen : QGuiApplication::screens()) {
+        auto *action = screens->addAction(screen->name());
+        connect(action, &QAction::triggered, this, [this, screen] { moveToScreen(screen); });
+    }
     menu.addSeparator();
     auto *snooze = menu.addAction("Nap for 15 minutes");
     auto *hide = menu.addAction("Hide pet (restore from tray)");

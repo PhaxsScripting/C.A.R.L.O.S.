@@ -23,10 +23,10 @@ Window {
         bubble: pet.bubble
         still: pet.still || !petWindow.visible
         mood: pet.mood
+        dragMoved: pet.dragMoved
         onPatted: pet.pet()
         onMenuRequested: pet.menu()
         onDragStarted: pet.beginDrag()
-        onDragged: pet.drag()
         onDragFinished: pet.endDrag()
     }
 }

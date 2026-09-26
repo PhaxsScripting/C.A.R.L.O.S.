@@ -9,7 +9,8 @@ repo root as your normal user.
 - Python 3.11+; tested with 3.14.
 - CMake 3.21+, a C++20 compiler and Qt 6.6+ with Core, Gui, Qml, Quick,
   QuickControls2, Network, Widgets, DBus and Test.
-- LayerShellQt 6.6+ on Linux for the voice HUD.
+- LayerShellQt 6.6+ on Linux for the voice HUD and desktop pet. The pet also needs
+  a KDE Plasma Wayland session.
 - Qt's `qmltestrunner` for the QML tests.
 - Bubblewrap (`bwrap`) for sandboxed project execution and its Linux tests.
 
@@ -82,5 +83,6 @@ through Plasma's Add Widgets menu.
 
 ## Desktop pet
 
-For the little desktop buddy, see [Carlos Pet](PET.md). You can install it on its
-own after the UI build, without starting the core or enabling autostart.
+For the little desktop buddy, see [Carlos Pet](PET.md). The standard Linux install includes it and
+starts it with Carlos. The pet-only installer is also available if you want the
+buddy without starting the core or changing login startup.

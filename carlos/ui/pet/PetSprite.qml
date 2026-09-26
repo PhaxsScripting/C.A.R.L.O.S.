@@ -7,10 +7,11 @@ Item {
     property bool still: false
     property bool blink: false
     property bool patting: false
+    property bool dragMoved: false
     signal patted()
     signal menuRequested()
     signal dragStarted()
-    signal dragged()
+    signal dragged(point pointer)
     signal dragFinished()
 
     Rectangle {
@@ -93,13 +94,13 @@ Item {
             onPositionChanged: function(mouse) {
                 if (pressed && (pressedButtons & Qt.LeftButton)) {
                     if (Math.abs(mouse.x - start.x) + Math.abs(mouse.y - start.y) > 5) moved = true
-                    if (moved) root.dragged()
+                    if (moved) root.dragged(mapToItem(root, mouse.x, mouse.y))
                 }
             }
             onReleased: function(mouse) {
                 root.dragFinished()
                 if (mouse.button === Qt.RightButton) root.menuRequested()
-                else if (!moved) { root.patting = true; patTimer.restart(); root.patted() }
+                else if (!moved && !root.dragMoved) { root.patting = true; patTimer.restart(); root.patted() }
             }
             onCanceled: root.dragFinished()
         }

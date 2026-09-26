@@ -50,3 +50,11 @@ on your machine. The old `ev` names are still there so existing installs work.
 
 Original code is [MIT](LICENSE), copyright Phax. Dependencies, models and voices
 keep their own licenses.
+
+## Linux support
+
+Tested on Gentoo with KDE Plasma Wayland. The pet needs KDE, LayerShellQt and
+Qt 6.6 or newer. Other distributions with those dependencies may work, but they
+haven't had full desktop and voice testing. GNOME, Xfce and other compositors
+aren't supported by the pet's KWin integration. This isn't a universal Linux
+installer yet; the core also needs the platform tools described in [setup](docs/SETUP.md).

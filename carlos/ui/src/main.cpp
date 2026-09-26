@@ -81,6 +81,17 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    auto launchPet = [](const QStringList &arguments) {
+        const auto installed = QStandardPaths::findExecutable(QStringLiteral("carlos-pet"));
+        const auto binary = installed.isEmpty()
+                                ? QCoreApplication::applicationDirPath() + QStringLiteral("/ev-pet")
+                                : installed;
+        if (QFileInfo::exists(binary))
+            QProcess::startDetached(binary, arguments);
+    };
+    if (!screenshotMode)
+        launchPet({QStringLiteral("--background")});
+
     EvClient client;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("evClient"), &client);
@@ -139,13 +150,7 @@ int main(int argc, char *argv[]) {
         window->raise();
         window->requestActivate();
     };
-    QObject::connect(petAction, &QAction::triggered, &app, [] {
-        const auto installed = QStandardPaths::findExecutable(QStringLiteral("carlos-pet"));
-        const auto binary = installed.isEmpty()
-                                ? QCoreApplication::applicationDirPath() + QStringLiteral("/ev-pet")
-                                : installed;
-        QProcess::startDetached(binary, {});
-    });
+    QObject::connect(petAction, &QAction::triggered, &app, [launchPet] { launchPet({}); });
     QObject::connect(openAction, &QAction::triggered, &app, openWindow);
     QObject::connect(settingsAction, &QAction::triggered, &app, [window, openWindow] {
         window->setProperty("testPage", 9);

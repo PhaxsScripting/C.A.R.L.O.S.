@@ -11,7 +11,7 @@ TestCase {
     SignalSpy { id: pats; target: buddy; signalName: "patted" }
     SignalSpy { id: menus; target: buddy; signalName: "menuRequested" }
     SignalSpy { id: movement; target: buddy; signalName: "dragged" }
-    function init() { pats.clear(); menus.clear(); movement.clear(); buddy.bubble = "" }
+    function init() { pats.clear(); menus.clear(); movement.clear(); buddy.bubble = ""; buddy.dragMoved = false }
     function test_pat_and_menu() {
         mouseClick(buddy, 164, 135, Qt.LeftButton)
         compare(pats.count, 1)
@@ -21,6 +21,11 @@ TestCase {
     function test_drag_does_not_pet() {
         mousePress(buddy, 164, 135, Qt.LeftButton)
         mouseMove(buddy, 180, 148, 30)
+        verify(movement.count > 0)
+        const pointer = movement.signalArguments[movement.count - 1][0]
+        compare(pointer.x, 180)
+        compare(pointer.y, 148)
+        compare(pats.count, 0)
         mouseRelease(buddy, 180, 148, Qt.LeftButton)
         verify(movement.count > 0)
         compare(pats.count, 0)
@@ -30,5 +35,11 @@ TestCase {
         buddy.still = false
         buddy.still = true
         compare(buddy.blink, false)
+    }
+    function test_compositor_drag_does_not_pat() {
+        mousePress(buddy, 164, 135, Qt.LeftButton)
+        buddy.dragMoved = true
+        mouseRelease(buddy, 164, 135, Qt.LeftButton)
+        compare(pats.count, 0)
     }
 }

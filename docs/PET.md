@@ -18,8 +18,11 @@ carlos-pet
 
 Or run `carlos/build/ui/ev-pet` straight from the checkout. The full Carlos user
 installer includes the pet too. Both add a **Carlos Pet** app menu entry; the
-control center's tray menu also has **Desktop Pet**. The pet doesn't auto-start
-at login. Installing only the pet leaves the running assistant alone.
+control center's tray menu also has **Desktop Pet**. The standard Carlos installer
+starts the pet, and the Carlos UI brings it back
+at login through its existing startup entry. Turn off **Launch with Carlos** in
+the pet menu if you don't want that. Installing only the pet leaves the running
+assistant and login startup alone.
 
 ## Things he does
 
@@ -28,11 +31,16 @@ at login. Installing only the pet leaves the running assistant alone.
 - Waits for an app category to settle for eight seconds. Automatic comments
   are at least 90 seconds apart and disappear after about eight seconds.
 - Reacts when you click him. Drag his body to move him; he remembers the spot.
-- Hides while the screen is locked and, by default, while a fullscreen app is
-  focused. He comes back when you leave it.
+- Stays above windows, including fullscreen apps, by default. Screen locking
+  and Carlos privacy modes still hide him. You can enable fullscreen hiding
+  from the pet menu.
 - Uses the running Carlos core's small panel status reply to show a thinking
   light and respect privacy mode. Older cores without the privacy field won't
   provide that signal; quiet mode and screen-lock hiding still work.
+
+The pet starts on the screen under your mouse. Opening Carlos Pet again or
+choosing **Show Carlos Pet** from the tray brings him to that screen. There is
+also a **Move to screen** menu for picking a monitor directly.
 
 Right-click the pet for **Quiet mode**, **Reduced motion**, **Hide during
 fullscreen apps**, a 15-minute nap, position reset, or quit. The tray icon brings
@@ -44,8 +52,10 @@ He never takes keyboard focus just by appearing.
 
 ## What the comments know
 
-Only the active app's resource class comes from KWin. The pet maps it to a small
-category and picks a local phrase. It doesn't read window titles, documents,
+Comments use the active app's resource class from KWin. The pet maps it to a small
+category and picks a local phrase. KWin also supplies the monitor name for placement
+and pointer positions while you drag; the pointer listener stops when you let go.
+It doesn't read window titles, documents,
 browser history, screenshots or typed text. No activity history is saved.
 Comments are playful guesses about the app category, not claims that he saw you
 finish a task or understood what was on screen.
@@ -67,4 +77,4 @@ config directory. To remove a pet-only install, quit it and remove these files:
 Use your XDG data directory instead if customized. The pet installer prints a
 backup directory with the previous files and a manifest for restoring them. Keep
 that backup if you might want to undo an update. It never changes Plasma panels,
-wallpaper, shortcuts or login startup.
+wallpaper, shortcuts or the existing login startup entries.

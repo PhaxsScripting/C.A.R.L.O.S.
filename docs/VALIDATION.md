@@ -30,3 +30,11 @@ checks lock hiding, quiet pats and rejection of direct app observations.
 The pet was also launched on KDE Wayland without taking keyboard focus. A short
 idle sample measured 0.3% CPU and about 37 MiB proportional memory (115 MiB RSS,
 including shared Qt libraries). This is one idle sample, not a gaming benchmark.
+
+The follow-up pet fix passed all four CTest groups and both installer tests.
+Live KWin checks covered slow dragging and 120 rapid mouse movements while
+holding the button: the pet followed the pointer without needing another click.
+The temporary pointer listener was gone after release. Dragging now uses KWin's
+actual pointer coordinates and requests a frame for each position update.
+A screenshot confirmed the pet remained visible above a focused fullscreen test
+window on the laptop display. The screen menu also moved it between both monitors.

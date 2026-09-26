@@ -17,6 +17,7 @@ class PetController : public QObject, protected QDBusContext {
     Q_PROPERTY(bool still READ still NOTIFY changed)
     Q_PROPERTY(bool quiet READ quiet NOTIFY changed)
     Q_PROPERTY(bool observing READ observing NOTIFY changed)
+    Q_PROPERTY(bool dragMoved READ dragMoved NOTIFY dragChanged)
   public:
     explicit PetController(bool preview = false, QObject *parent = nullptr);
     ~PetController() override;
@@ -27,23 +28,27 @@ class PetController : public QObject, protected QDBusContext {
     bool still() const { return m_settings.value("still", false).toBool(); }
     bool quiet() const { return m_settings.value("quiet", false).toBool(); }
     bool observing() const { return m_tracking; }
+    bool dragMoved() const { return m_dragMoved; }
     Q_INVOKABLE void pet();
     Q_INVOKABLE void menu();
     Q_INVOKABLE void beginDrag();
-    Q_INVOKABLE void drag();
     Q_INVOKABLE void endDrag();
     void stop();
   public slots:
-    Q_SCRIPTABLE void Observe(const QString &app, bool fullscreen);
+    Q_SCRIPTABLE void Observe(const QString &app, bool fullscreen, const QString &screenName = {});
+    Q_SCRIPTABLE bool MoveToScreen(const QString &name);
+    Q_SCRIPTABLE void DragPointer(int x, int y, int serial);
     Q_SCRIPTABLE void Show();
     Q_SCRIPTABLE void Quit();
     void SetLocked(bool locked);
   signals:
     void changed();
+    void dragChanged();
 
   private:
     void tick();
     void position();
+    void moveToScreen(QScreen *screen);
     void startTracking();
     void pollCore();
     void say(const QString &line);
@@ -57,8 +62,11 @@ class PetController : public QObject, protected QDBusContext {
     QWindow *m_window = nullptr;
     QString m_bubble, m_mood = "happy", m_kwinOwner;
     bool m_preview, m_locked = true, m_fullscreen = false, m_hidden = false;
+    bool m_needsScreen = true;
     bool m_tracking = false, m_loaded = false, m_corePrivate = false, m_dragging = false;
+    bool m_dragMoved = false, m_hasDragPointer = false;
     qint64 m_bubbleUntil = 0, m_snoozeUntil = 0, m_lastPet = -1000;
-    QPoint m_dragStart;
-    int m_right = 24, m_bottom = 64, m_dragRight = 0, m_dragBottom = 0;
+    QPointF m_dragStart;
+    int m_right = 24, m_bottom = 64;
+    int m_dragRight = 0, m_dragBottom = 0, m_dragSerial = 0;
 };

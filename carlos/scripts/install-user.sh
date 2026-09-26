@@ -25,6 +25,11 @@ if [ ! -x "$project_root/build/ui/ev-ui" ]; then
     exit 1
 fi
 
+if [ "$(uname -s)" = Linux ] && [ ! -x "$project_root/build/ui/ev-pet" ]; then
+    printf '%s\n' "Carlos Pet has not been built. Build all carlos/ui targets first." >&2
+    exit 1
+fi
+
 PYTHONPATH="$project_root/core" /usr/bin/python3 -m unittest discover -s "$project_root/tests" >/dev/null
 
 mkdir -p "$backup_root/files" "$bin_home" "$applications_dir" "$autostart_dir" "$icon_dir" "$dbus_services_dir" "$(dirname -- "$app_root")"
@@ -181,6 +186,10 @@ if [ "$start_core" = true ]; then
         fi
         exit 1
     fi
+fi
+
+if [ "$start_core" = true ] && [ -x "$bin_home/carlos-pet" ]; then
+    nohup "$bin_home/carlos-pet" --background >> "$state_home/ev/pet.log" 2>&1 < /dev/null &
 fi
 
 printf '%s\n' "Carlos installed for user $(id -un)."

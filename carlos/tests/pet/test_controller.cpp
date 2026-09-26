@@ -22,11 +22,23 @@ class PetControllerTests : public QObject {
         pet.SetLocked(false);
         QVERIFY(pet.shown());
     }
+    void unknownScreenIsRejected() {
+        PetController pet(true);
+        QVERIFY(!pet.MoveToScreen("missing-output"));
+    }
     void observationsCannotBeInjectedDirectly() {
         PetController pet(true);
         pet.Observe("minecraft", true);
         QVERIFY(pet.shown());
         QVERIFY(!pet.observing());
+    }
+    void pointerObservationsCannotBeInjectedDirectly() {
+        PetController pet(true);
+        pet.beginDrag();
+        pet.DragPointer(0, 0, 1);
+        pet.DragPointer(200, 300, 1);
+        QVERIFY(!pet.dragMoved());
+        pet.endDrag();
     }
     void quietDoesNotRespondToPats() {
         QSettings("Carlos", "DesktopPet").setValue("quiet", true);
