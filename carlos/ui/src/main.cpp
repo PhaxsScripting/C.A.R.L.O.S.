@@ -11,6 +11,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QStandardPaths>
 #include <QSystemTrayIcon>
 #include <QTimer>
 
@@ -116,6 +117,7 @@ int main(int argc, char *argv[]) {
     QSystemTrayIcon tray;
     QMenu trayMenu;
     QAction *openAction = trayMenu.addAction(QStringLiteral("Open Carlos"));
+    QAction *petAction = trayMenu.addAction(QStringLiteral("Desktop Pet"));
     QAction *pushToTalkAction = trayMenu.addAction(QStringLiteral("Push to Talk"));
     QAction *stopSpeakingAction = trayMenu.addAction(QStringLiteral("Stop Speaking"));
     trayMenu.addSeparator();
@@ -137,6 +139,13 @@ int main(int argc, char *argv[]) {
         window->raise();
         window->requestActivate();
     };
+    QObject::connect(petAction, &QAction::triggered, &app, [] {
+        const auto installed = QStandardPaths::findExecutable(QStringLiteral("carlos-pet"));
+        const auto binary = installed.isEmpty()
+                                ? QCoreApplication::applicationDirPath() + QStringLiteral("/ev-pet")
+                                : installed;
+        QProcess::startDetached(binary, {});
+    });
     QObject::connect(openAction, &QAction::triggered, &app, openWindow);
     QObject::connect(settingsAction, &QAction::triggered, &app, [window, openWindow] {
         window->setProperty("testPage", 9);

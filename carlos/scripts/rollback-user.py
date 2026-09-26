@@ -15,9 +15,18 @@ def allowed_targets(home, data, config):
         data / "ev/app",
         *(
             home / ".local/bin" / name
-            for name in ("ev-core", "evctl", "carlosctl", "ev-ui", "ev-activate", "ev-panel-state")
+            for name in (
+                "ev-core",
+                "evctl",
+                "carlosctl",
+                "ev-ui",
+                "ev-activate",
+                "ev-panel-state",
+                "carlos-pet",
+            )
         ),
         data / "applications/ev-control-center.desktop",
+        data / "applications/carlos-pet.desktop",
         config / "autostart/ev-core.desktop",
         config / "autostart/ev-shell.desktop",
         data / "icons/hicolor/scalable/apps/ev-control-center.svg",

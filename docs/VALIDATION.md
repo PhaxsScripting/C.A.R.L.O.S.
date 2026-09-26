@@ -19,3 +19,14 @@ and generated files. It can miss things, so don't treat it as a security audit.
 These results cover the source checkout. They don't prove microphone quality,
 wake reliability or response speed in a real room. FreeBSD and other desktops
 still need testing. No installed apps were upgraded during this repo cleanup.
+
+## Desktop pet
+
+September 26, 2026: 973 Python tests passed, including the pet privacy status
+check. The UI build and four CTest groups passed: client, QML interface (including
+pet click/drag/reduced motion), comment policy, and pet controller. The controller
+checks lock hiding, quiet pats and rejection of direct app observations.
+
+The pet was also launched on KDE Wayland without taking keyboard focus. A short
+idle sample measured 0.3% CPU and about 37 MiB proportional memory (115 MiB RSS,
+including shared Qt libraries). This is one idle sample, not a gaming benchmark.

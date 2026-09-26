@@ -15,7 +15,7 @@ to set up your own speech runtimes and models.
 | Folder | What's in it |
 | --- | --- |
 | [`carlos/core/ev`](carlos/core/ev) | AI providers, voice, memory, desktop tools, permissions and local IPC |
-| [`carlos/ui`](carlos/ui) | Control center and voice HUD |
+| [`carlos/ui`](carlos/ui) | Control center, voice HUD and desktop pet |
 | [`carlos/plasma`](carlos/plasma) | Optional voice activity widget for Plasma |
 | [`carlos/assets`](carlos/assets) | Desktop bridge and wake word files |
 | [`carlos/scripts`](carlos/scripts) | Install, rollback, diagnostics and benchmarks |
@@ -43,7 +43,7 @@ Cloning and building won't start Carlos. The user installer does enable login
 startup, so read its notes before running it. Models, keys and personal data stay
 on your machine. The old `ev` names are still there so existing installs work.
 
-[Using Carlos](docs/USAGE.md) · [Test results](docs/VALIDATION.md) ·
+[Desktop pet](docs/PET.md) · [Using Carlos](docs/USAGE.md) · [Test results](docs/VALIDATION.md) ·
 [Security](SECURITY.md) · [Third-party notices](THIRD_PARTY.md)
 
 ## License

@@ -16,3 +16,13 @@ jobs:
       - run: python tools/check-release.py
       - run: pip install -r carlos/requirements.txt
       - run: PYTHONPATH=carlos/core python -m unittest discover -s carlos/tests
+
+  pet:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cmake g++ qt6-base-dev qt6-declarative-dev-tools qml6-module-qttest qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript
+      - run: cmake -S carlos/tests/pet -B carlos/build/pet-tests
+      - run: cmake --build carlos/build/pet-tests -j2
+      - run: ctest --test-dir carlos/build/pet-tests --output-on-failure
+      - run: QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input carlos/tests/qml/tst_pet.qml -platform offscreen

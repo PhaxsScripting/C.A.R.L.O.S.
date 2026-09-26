@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+pet_data="${XDG_DATA_HOME:-$HOME/.local/share}/ev"
+exec "$pet_data/app/bin/ev-pet" "$@"

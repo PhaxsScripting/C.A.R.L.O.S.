@@ -84,6 +84,9 @@ cp -a -- "$project_root/core/." "$stage_root/app/core/"
 cp -a -- "$project_root/assets/voice/." "$stage_root/app/assets/voice/"
 cp -a -- "$project_root/assets/kwin/." "$stage_root/app/assets/kwin/"
 install -m 755 "$project_root/build/ui/ev-ui" "$stage_root/app/bin/ev-ui"
+if [ -x "$project_root/build/ui/ev-pet" ]; then
+    install -m 755 "$project_root/build/ui/ev-pet" "$stage_root/app/bin/ev-pet"
+fi
 
 installation_changed=true
 backup_target app "$app_root"
@@ -91,6 +94,8 @@ backup_target ev-core "$bin_home/ev-core"
 backup_target evctl "$bin_home/evctl"
 backup_target carlosctl "$bin_home/carlosctl"
 backup_target ev-ui "$bin_home/ev-ui"
+backup_target carlos-pet "$bin_home/carlos-pet"
+backup_target pet-desktop "$applications_dir/carlos-pet.desktop"
 backup_target ev-activate "$bin_home/ev-activate"
 backup_target ev-panel-state "$bin_home/ev-panel-state"
 backup_target desktop "$applications_dir/ev-control-center.desktop"
@@ -105,6 +110,10 @@ install -m 755 "$project_root/scripts/ev-core" "$bin_home/ev-core"
 install -m 755 "$project_root/scripts/evctl" "$bin_home/evctl"
 install -m 755 "$project_root/scripts/carlosctl" "$bin_home/carlosctl"
 install -m 755 "$project_root/scripts/ev-ui" "$bin_home/ev-ui"
+if [ -x "$app_root/bin/ev-pet" ]; then
+    install -m 755 "$project_root/scripts/carlos-pet" "$bin_home/carlos-pet"
+    sed "s|@CARLOS_PET@|$bin_home/carlos-pet|g" "$project_root/packaging/carlos-pet.desktop.in" > "$applications_dir/carlos-pet.desktop"
+fi
 install -m 755 "$project_root/scripts/ev-activate" "$bin_home/ev-activate"
 install -m 755 "$project_root/scripts/ev-panel-state" "$bin_home/ev-panel-state"
 install -m 644 "$project_root/packaging/ev-control-center.svg" "$icon_dir/ev-control-center.svg"

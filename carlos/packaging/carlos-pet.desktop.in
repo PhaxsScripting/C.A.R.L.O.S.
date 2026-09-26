@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Carlos Pet
+GenericName=Desktop Companion
+Comment=A tiny app-aware buddy for your desktop
+Exec=@CARLOS_PET@
+Icon=face-smile
+Terminal=false
+Categories=Utility;
+Keywords=Carlos;Pet;Buddy;Companion;
+StartupNotify=false

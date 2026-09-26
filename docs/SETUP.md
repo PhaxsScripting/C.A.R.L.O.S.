@@ -8,7 +8,7 @@ repo root as your normal user.
 
 - Python 3.11+; tested with 3.14.
 - CMake 3.21+, a C++20 compiler and Qt 6.6+ with Core, Gui, Qml, Quick,
-  QuickControls2, Network, Widgets and Test.
+  QuickControls2, Network, Widgets, DBus and Test.
 - LayerShellQt 6.6+ on Linux for the voice HUD.
 - Qt's `qmltestrunner` for the QML tests.
 - Bubblewrap (`bwrap`) for sandboxed project execution and its Linux tests.
@@ -79,3 +79,8 @@ your distro too; activating this repo's venv won't provide them to the launchers
 
 The optional Plasma widget has its own installer. After installing it, add it
 through Plasma's Add Widgets menu.
+
+## Desktop pet
+
+For the little desktop buddy, see [Carlos Pet](PET.md). You can install it on its
+own after the UI build, without starting the core or enabling autostart.
